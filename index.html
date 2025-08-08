@@ -1,0 +1,1752 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI伙食官 · 智能伙食管理系统</title>
+  
+  <!-- 引入外部资源 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  
+  <!-- Tailwind CSS 配置 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4CAF50', // 绿色主色调（代表健康、新鲜）
+            secondary: '#FF9800', // 橙色辅助色（代表食物、活力）
+            neutral: {
+              100: '#F5F5F5',
+              200: '#EEEEEE',
+              300: '#E0E0E0',
+              400: '#BDBDBD',
+              500: '#9E9E9E',
+              600: '#757575',
+              700: '#616161',
+              800: '#424242',
+              900: '#212121',
+            }
+          },
+          fontFamily: {
+            inter: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      }
+    }
+  </script>
+  
+  <!-- 自定义工具类 -->
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .card-shadow {
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      }
+      .card-hover {
+        transition: all 0.3s ease;
+      }
+      .card-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.5s ease-in-out;
+      }
+      .animate-slide-up {
+        animation: slideUp 0.5s ease-out;
+      }
+      .animate-pulse-soft {
+        animation: pulseSoft 2s infinite;
+      }
+      .progress-bar {
+        height: 6px;
+        background: linear-gradient(90deg, #4CAF50 var(--progress), #E0E0E0 var(--progress));
+        border-radius: 3px;
+      }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      @keyframes pulseSoft {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+    }
+  </style>
+</head>
+<body class="font-inter bg-neutral-100 text-neutral-800 min-h-screen flex flex-col">
+  <!-- 移动端导航栏 -->
+  <header class="lg:hidden fixed top-0 left-0 right-0 bg-white shadow-md z-50 transition-all duration-300" id="mobile-header">
+    <div class="flex items-center justify-between px-4 py-3">
+      <div class="flex items-center">
+        <button id="menu-toggle" class="mr-3 text-neutral-700 hover:text-primary transition-colors">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+        <h1 class="text-lg font-bold text-primary">AI伙食官</h1>
+      </div>
+      <div class="relative">
+        <button class="text-neutral-700 hover:text-primary transition-colors">
+          <i class="fa fa-bell text-xl"></i>
+          <span class="absolute -top-1 -right-1 w-4 h-4 bg-secondary rounded-full text-white text-xs flex items-center justify-center">3</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex flex-1 pt-14 lg:pt-0">
+    <!-- 侧边栏导航 -->
+    <aside id="sidebar" class="fixed lg:static top-14 lg:top-0 left-0 bottom-0 w-64 bg-white shadow-lg transform -translate-x-full lg:translate-x-0 transition-transform duration-300 z-40 overflow-y-auto">
+      <div class="p-4 border-b border-neutral-200">
+        <div class="flex items-center">
+          <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-white mr-3">
+            <i class="fa fa-cutlery"></i>
+          </div>
+          <h1 class="text-xl font-bold text-primary">AI伙食官</h1>
+        </div>
+        <p class="text-sm text-neutral-500 mt-1">智能伙食管理系统</p>
+      </div>
+      
+      <nav class="p-2">
+        <ul>
+          <li class="mb-1">
+            <a href="#dashboard" class="nav-link flex items-center px-4 py-3 rounded-lg bg-primary/10 text-primary font-medium">
+              <i class="fa fa-tachometer w-5 text-center mr-3"></i>
+              <span>首页总览</span>
+            </a>
+          </li>
+          <li class="mb-1">
+            <a href="#preferences" class="nav-link flex items-center px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors">
+              <i class="fa fa-list-alt w-5 text-center mr-3"></i>
+              <span>偏好提交</span>
+            </a>
+          </li>
+          <li class="mb-1">
+            <a href="#menu" class="nav-link flex items-center px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors">
+              <i class="fa fa-calendar w-5 text-center mr-3"></i>
+              <span>本周菜单</span>
+            </a>
+          </li>
+          <li class="mb-1">
+            <a href="#shopping" class="nav-link flex items-center px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors">
+              <i class="fa fa-shopping-basket w-5 text-center mr-3"></i>
+              <span>采购清单</span>
+            </a>
+          </li>
+          <li class="mb-1">
+            <a href="#duty" class="nav-link flex items-center px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors">
+              <i class="fa fa-users w-5 text-center mr-3"></i>
+              <span>值班安排</span>
+            </a>
+          </li>
+          <li class="mb-1">
+            <a href="#expenses" class="nav-link flex items-center px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors">
+              <i class="fa fa-money w-5 text-center mr-3"></i>
+              <span>支出记录</span>
+            </a>
+          </li>
+          <li class="mb-1">
+            <a href="#settlement" class="nav-link flex items-center px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors">
+              <i class="fa fa-calculator w-5 text-center mr-3"></i>
+              <span>本周结算</span>
+            </a>
+          </li>
+          <li class="mb-1">
+            <a href="#history" class="nav-link flex items-center px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors">
+              <i class="fa fa-history w-5 text-center mr-3"></i>
+              <span>历史记录</span>
+            </a>
+          </li>
+          <li class="mb-1">
+            <a href="#notifications" class="nav-link flex items-center px-4 py-3 rounded-lg text-neutral-700 hover:bg-neutral-100 transition-colors relative">
+              <i class="fa fa-bullhorn w-5 text-center mr-3"></i>
+              <span>公告提醒</span>
+              <span class="absolute right-3 top-3 w-2 h-2 bg-secondary rounded-full"></span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+      
+      <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-neutral-200 bg-white">
+        <div class="flex items-center">
+          <img src="https://picsum.photos/id/64/200" alt="用户头像" class="w-10 h-10 rounded-full object-cover mr-3">
+          <div>
+            <p class="font-medium text-sm">张小明</p>
+            <p class="text-xs text-neutral-500">管理员</p>
+          </div>
+          <button class="ml-auto text-neutral-500 hover:text-neutral-700">
+            <i class="fa fa-sign-out"></i>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="flex-1 lg:ml-64 p-4 lg:p-6 animate-fade-in">
+      <!-- 首页总览 -->
+      <section id="dashboard" class="space-y-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">首页总览</h2>
+            <p class="text-neutral-500">2023年6月第3周 · 6月19日-6月25日</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex space-x-3">
+            <button class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center">
+              <i class="fa fa-refresh mr-2"></i>
+              <span>刷新数据</span>
+            </button>
+            <button class="px-4 py-2 bg-white text-neutral-700 rounded-lg border border-neutral-300 hover:bg-neutral-50 transition-colors shadow-sm">
+              <i class="fa fa-download mr-2"></i>
+              <span>导出</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 统计卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- 本周吃饭人数 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.1s">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-neutral-500 text-sm">本周吃饭人数</p>
+                <h3 class="text-3xl font-bold mt-1">5人</h3>
+                <p class="text-green-500 text-sm mt-2 flex items-center">
+                  <i class="fa fa-arrow-up mr-1"></i>
+                  <span>1人 较上周</span>
+                </p>
+              </div>
+              <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-500">
+                <i class="fa fa-users text-xl"></i>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 当前值班人 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.2s">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-neutral-500 text-sm">当前值班人</p>
+                <h3 class="text-xl font-bold mt-1">李华</h3>
+                <p class="text-neutral-500 text-sm mt-2">
+                  <i class="fa fa-calendar-check-o mr-1"></i>
+                  <span>负责至 6月25日</span>
+                </p>
+              </div>
+              <div class="w-12 h-12 rounded-full overflow-hidden border-2 border-primary">
+                <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-full h-full object-cover">
+              </div>
+            </div>
+          </div>
+          
+          <!-- 今日是否需要采购 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.3s">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-neutral-500 text-sm">今日是否采购</p>
+                <h3 class="text-xl font-bold mt-1 text-secondary animate-pulse-soft">需要采购</h3>
+                <p class="text-neutral-500 text-sm mt-2">
+                  <i class="fa fa-clock-o mr-1"></i>
+                  <span>建议 18:00 前完成</span>
+                </p>
+              </div>
+              <div class="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center text-orange-500">
+                <i class="fa fa-shopping-cart text-xl"></i>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 本周预算使用情况 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.4s">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-neutral-500 text-sm">本周预算使用</p>
+                <h3 class="text-xl font-bold mt-1">¥850 / ¥1200</h3>
+                <p class="text-green-500 text-sm mt-2 flex items-center">
+                  <i class="fa fa-arrow-down mr-1"></i>
+                  <span>节余 ¥350</span>
+                </p>
+              </div>
+              <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-500">
+                <i class="fa fa-money text-xl"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 本周菜单 -->
+        <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up" style="animation-delay: 0.5s">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-bold">本周菜单</h3>
+            <a href="#menu" class="text-primary hover:text-primary/80 text-sm font-medium flex items-center">
+              <span>查看全部</span>
+              <i class="fa fa-angle-right ml-1"></i>
+            </a>
+          </div>
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <!-- 今日菜单 -->
+            <div class="border border-primary rounded-lg p-4 bg-primary/5">
+              <div class="flex justify-between items-center mb-3">
+                <span class="font-medium">今天 (周一)</span>
+                <span class="bg-primary text-white text-xs px-2 py-1 rounded-full">今日</span>
+              </div>
+              <ul class="space-y-2">
+                <li class="flex items-center">
+                  <i class="fa fa-check-circle text-primary mr-2"></i>
+                  <span>红烧肉</span>
+                </li>
+                <li class="flex items-center">
+                  <i class="fa fa-check-circle text-primary mr-2"></i>
+                  <span>清炒时蔬</span>
+                </li>
+                <li class="flex items-center">
+                  <i class="fa fa-check-circle text-primary mr-2"></i>
+                  <span>紫菜蛋花汤</span>
+                </li>
+              </ul>
+              <div class="mt-3 pt-3 border-t border-primary/20 flex items-center text-sm text-neutral-600">
+                <i class="fa fa-user mr-1"></i>
+                <span>值班：李华</span>
+              </div>
+            </div>
+            
+            <!-- 明日菜单 -->
+            <div class="border border-neutral-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+              <div class="flex justify-between items-center mb-3">
+                <span class="font-medium">明天 (周二)</span>
+                <span class="bg-neutral-200 text-neutral-700 text-xs px-2 py-1 rounded-full">明日</span>
+              </div>
+              <ul class="space-y-2">
+                <li class="flex items-center">
+                  <i class="fa fa-circle-o text-neutral-400 mr-2"></i>
+                  <span>鱼香肉丝</span>
+                </li>
+                <li class="flex items-center">
+                  <i class="fa fa-circle-o text-neutral-400 mr-2"></i>
+                  <span>蒜蓉西兰花</span>
+                </li>
+                <li class="flex items-center">
+                  <i class="fa fa-circle-o text-neutral-400 mr-2"></i>
+                  <span>冬瓜丸子汤</span>
+                </li>
+              </ul>
+              <div class="mt-3 pt-3 border-t border-neutral-100 flex items-center text-sm text-neutral-600">
+                <i class="fa fa-user mr-1"></i>
+                <span>值班：李华</span>
+              </div>
+            </div>
+            
+            <!-- 周三菜单 -->
+            <div class="border border-neutral-200 rounded-lg p-4 hover:border-primary/50 transition-colors">
+              <div class="flex justify-between items-center mb-3">
+                <span class="font-medium">周三</span>
+              </div>
+              <ul class="space-y-2">
+                <li class="flex items-center">
+                  <i class="fa fa-circle-o text-neutral-400 mr-2"></i>
+                  <span>宫保鸡丁</span>
+                </li>
+                <li class="flex items-center">
+                  <i class="fa fa-circle-o text-neutral-400 mr-2"></i>
+                  <span>麻婆豆腐</span>
+                </li>
+                <li class="flex items-center">
+                  <i class="fa fa-circle-o text-neutral-400 mr-2"></i>
+                  <span>番茄蛋汤</span>
+                </li>
+              </ul>
+              <div class="mt-3 pt-3 border-t border-neutral-100 flex items-center text-sm text-neutral-600">
+                <i class="fa fa-user mr-1"></i>
+                <span>值班：李华</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 预算使用情况图表 -->
+        <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up" style="animation-delay: 0.6s">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-bold">预算使用趋势</h3>
+            <div class="flex space-x-2">
+              <button class="px-3 py-1 text-sm bg-primary/10 text-primary rounded-full">周</button>
+              <button class="px-3 py-1 text-sm bg-neutral-100 text-neutral-600 rounded-full hover:bg-neutral-200">月</button>
+              <button class="px-3 py-1 text-sm bg-neutral-100 text-neutral-600 rounded-full hover:bg-neutral-200">年</button>
+            </div>
+          </div>
+          <div class="h-64">
+            <canvas id="budgetChart"></canvas>
+          </div>
+        </div>
+        
+        <!-- 最近通知 -->
+        <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up" style="animation-delay: 0.7s">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-bold">最近通知</h3>
+            <a href="#notifications" class="text-primary hover:text-primary/80 text-sm font-medium flex items-center">
+              <span>查看全部</span>
+              <i class="fa fa-angle-right ml-1"></i>
+            </a>
+          </div>
+          
+          <div class="space-y-4">
+            <div class="flex p-3 border border-neutral-100 rounded-lg hover:border-primary/30 hover:bg-primary/5 transition-colors">
+              <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-500 mr-3 flex-shrink-0">
+                <i class="fa fa-bell"></i>
+              </div>
+              <div class="flex-1">
+                <p class="text-sm">系统已自动生成本周菜单，请查看确认</p>
+                <p class="text-xs text-neutral-500 mt-1">今天 08:30</p>
+              </div>
+            </div>
+            
+            <div class="flex p-3 border border-neutral-100 rounded-lg hover:border-primary/30 hover:bg-primary/5 transition-colors">
+              <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-500 mr-3 flex-shrink-0">
+                <i class="fa fa-shopping-cart"></i>
+              </div>
+              <div class="flex-1">
+                <p class="text-sm">今日需前往钱大妈采购肉类和蔬菜</p>
+                <p class="text-xs text-neutral-500 mt-1">昨天 20:15</p>
+              </div>
+            </div>
+            
+            <div class="flex p-3 border border-neutral-100 rounded-lg hover:border-primary/30 hover:bg-primary/5 transition-colors">
+              <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-500 mr-3 flex-shrink-0">
+                <i class="fa fa-check-circle"></i>
+              </div>
+              <div class="flex-1">
+                <p class="text-sm">王小红已提交本周饮食偏好</p>
+                <p class="text-xs text-neutral-500 mt-1">6月18日 19:42</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 偏好提交页 -->
+      <section id="preferences" class="space-y-6 hidden">
+        <div>
+          <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">提交本周饮食偏好</h2>
+          <p class="text-neutral-500">请提交您本周想吃的菜和饮食禁忌，截止时间：6月18日 23:59</p>
+        </div>
+        
+        <div class="bg-white rounded-xl p-5 card-shadow">
+          <form id="preferences-form" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label for="name" class="block text-sm font-medium text-neutral-700 mb-1">您的姓名</label>
+                <input type="text" id="name" name="name" 
+                  class="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-colors"
+                  placeholder="请输入您的姓名" value="张小明">
+                
+                <div class="mt-2 flex items-center text-sm text-neutral-500">
+                  <i class="fa fa-info-circle mr-1"></i>
+                  <span>系统会自动识别历史用户</span>
+                </div>
+              </div>
+              
+              <div>
+                <label for="participate" class="block text-sm font-medium text-neutral-700 mb-1">本周是否参与吃饭</label>
+                <select id="participate" name="participate"
+                  class="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-colors">
+                  <option value="yes" selected>是，全程参与</option>
+                  <option value="partial">部分参与（请备注）</option>
+                  <option value="no">不参与</option>
+                </select>
+              </div>
+            </div>
+            
+            <div>
+              <label for="favorite-dishes" class="block text-sm font-medium text-neutral-700 mb-1">想吃的菜（可输入多个，用逗号分隔）</label>
+              <textarea id="favorite-dishes" name="favorite-dishes" rows="3"
+                class="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-colors"
+                placeholder="例如：红烧肉, 鱼香肉丝, 番茄炒蛋">红烧肉, 宫保鸡丁, 清蒸鱼</textarea>
+            </div>
+            
+            <div>
+              <label for="dislikes" class="block text-sm font-medium text-neutral-700 mb-1">忌口/不喜欢的食材</label>
+              <textarea id="dislikes" name="dislikes" rows="2"
+                class="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-colors"
+                placeholder="例如：香菜, 辣椒, 羊肉">香菜, 芥末</textarea>
+            </div>
+            
+            <div>
+              <label for="style-preference" class="block text-sm font-medium text-neutral-700 mb-1">饮食风格建议</label>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <label class="flex items-center p-3 border border-neutral-200 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                  <input type="radio" name="style" value="light" class="mr-2 text-primary">
+                  <span>清淡</span>
+                </label>
+                <label class="flex items-center p-3 border border-neutral-200 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                  <input type="radio" name="style" value="spicy" class="mr-2 text-primary" checked>
+                  <span>微辣</span>
+                </label>
+                <label class="flex items-center p-3 border border-neutral-200 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                  <input type="radio" name="style" value="sichuan" class="mr-2 text-primary">
+                  <span>川菜</span>
+                </label>
+                <label class="flex items-center p-3 border border-neutral-200 rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                  <input type="radio" name="style" value="cantonese" class="mr-2 text-primary">
+                  <span>粤菜</span>
+                </label>
+              </div>
+              <input type="text" id="style-preference" name="style-preference"
+                class="w-full mt-3 px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-colors"
+                placeholder="其他特殊要求">
+            </div>
+            
+            <div>
+              <label for="notes" class="block text-sm font-medium text-neutral-700 mb-1">其他备注</label>
+              <textarea id="notes" name="notes" rows="2"
+                class="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-colors"
+                placeholder="有什么其他想法或建议，请告诉我们"></textarea>
+            </div>
+            
+            <div class="flex justify-end pt-4 border-t border-neutral-100">
+              <button type="button" class="px-6 py-2 mr-3 text-neutral-700 bg-neutral-100 rounded-lg hover:bg-neutral-200 transition-colors">
+                保存草稿
+              </button>
+              <button type="submit" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-sm">
+                提交偏好
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+      
+      <!-- 本周菜单页 -->
+      <section id="menu" class="space-y-6 hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">本周菜单</h2>
+            <p class="text-neutral-500">2023年6月第3周 · 6月19日-6月25日</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex space-x-3">
+            <button id="generate-menu" class="px-4 py-2 bg-secondary text-white rounded-lg hover:bg-secondary/90 transition-colors shadow-sm flex items-center">
+              <i class="fa fa-magic mr-2"></i>
+              <span>AI生成菜单</span>
+            </button>
+            <button class="px-4 py-2 bg-white text-neutral-700 rounded-lg border border-neutral-300 hover:bg-neutral-50 transition-colors shadow-sm">
+              <i class="fa fa-share-alt mr-2"></i>
+              <span>分享菜单</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 菜单生成提示 -->
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg animate-slide-up">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <i class="fa fa-info-circle text-blue-500"></i>
+            </div>
+            <div class="ml-3">
+              <p class="text-sm text-blue-700">
+                点击"AI生成菜单"按钮，系统将根据所有人的饮食偏好自动生成一周菜单和采购清单。
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 每日菜单卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- 周一菜单 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.1s">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold">周一 (今天)</h3>
+              <span class="bg-primary text-white text-xs px-2 py-1 rounded-full">今日</span>
+            </div>
+            
+            <div class="space-y-4">
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-cutlery text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">红烧肉</h4>
+                  <p class="text-sm text-neutral-500 mt-1">五花肉、姜、八角、桂皮、冰糖</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-leaf text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">清炒时蔬</h4>
+                  <p class="text-sm text-neutral-500 mt-1">青菜、蒜末、盐、食用油</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-tint text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">紫菜蛋花汤</h4>
+                  <p class="text-sm text-neutral-500 mt-1">紫菜、鸡蛋、葱花、盐</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-5 pt-4 border-t border-neutral-100">
+              <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center">
+                  <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-6 h-6 rounded-full mr-2">
+                  <span class="text-sm">值班：李华</span>
+                </div>
+                <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">已采购</span>
+              </div>
+              
+              <div class="flex justify-between items-center">
+                <div class="flex space-x-2">
+                  <button class="text-sm flex items-center text-green-600 hover:text-green-700">
+                    <i class="fa fa-thumbs-up mr-1"></i>
+                    <span>好吃</span>
+                  </button>
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-neutral-700">
+                    <i class="fa fa-thumbs-down mr-1"></i>
+                    <span>一般</span>
+                  </button>
+                </div>
+                <button class="text-primary text-sm hover:text-primary/80">编辑</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 周二菜单 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.2s">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold">周二 (明天)</h3>
+              <span class="bg-neutral-200 text-neutral-700 text-xs px-2 py-1 rounded-full">明日</span>
+            </div>
+            
+            <div class="space-y-4">
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-cutlery text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">鱼香肉丝</h4>
+                  <p class="text-sm text-neutral-500 mt-1">猪肉、胡萝卜、木耳、青椒、葱姜蒜</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-leaf text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">蒜蓉西兰花</h4>
+                  <p class="text-sm text-neutral-500 mt-1">西兰花、蒜末、盐、食用油</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-tint text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">冬瓜丸子汤</h4>
+                  <p class="text-sm text-neutral-500 mt-1">冬瓜、猪肉馅、葱姜、香菜</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-5 pt-4 border-t border-neutral-100">
+              <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center">
+                  <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-6 h-6 rounded-full mr-2">
+                  <span class="text-sm">值班：李华</span>
+                </div>
+                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">待采购</span>
+              </div>
+              
+              <div class="flex justify-between items-center">
+                <div class="flex space-x-2">
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-green-700">
+                    <i class="fa fa-thumbs-up mr-1"></i>
+                    <span>好吃</span>
+                  </button>
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-neutral-700">
+                    <i class="fa fa-thumbs-down mr-1"></i>
+                    <span>一般</span>
+                  </button>
+                </div>
+                <button class="text-primary text-sm hover:text-primary/80">编辑</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 周三菜单 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.3s">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold">周三</h3>
+            </div>
+            
+            <div class="space-y-4">
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-cutlery text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">宫保鸡丁</h4>
+                  <p class="text-sm text-neutral-500 mt-1">鸡肉、花生米、黄瓜、胡萝卜、辣椒</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-leaf text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">麻婆豆腐</h4>
+                  <p class="text-sm text-neutral-500 mt-1">豆腐、肉末、豆瓣酱、花椒、辣椒</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-tint text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">番茄蛋汤</h4>
+                  <p class="text-sm text-neutral-500 mt-1">番茄、鸡蛋、葱花、盐、香油</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-5 pt-4 border-t border-neutral-100">
+              <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center">
+                  <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-6 h-6 rounded-full mr-2">
+                  <span class="text-sm">值班：李华</span>
+                </div>
+                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">待采购</span>
+              </div>
+              
+              <div class="flex justify-between items-center">
+                <div class="flex space-x-2">
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-green-700">
+                    <i class="fa fa-thumbs-up mr-1"></i>
+                    <span>好吃</span>
+                  </button>
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-neutral-700">
+                    <i class="fa fa-thumbs-down mr-1"></i>
+                    <span>一般</span>
+                  </button>
+                </div>
+                <button class="text-primary text-sm hover:text-primary/80">编辑</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 周四菜单 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.4s">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold">周四</h3>
+            </div>
+            
+            <div class="space-y-4">
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-cutlery text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">清蒸鲈鱼</h4>
+                  <p class="text-sm text-neutral-500 mt-1">鲈鱼、姜丝、葱丝、料酒、蒸鱼豉油</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-leaf text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">炒时蔬</h4>
+                  <p class="text-sm text-neutral-500 mt-1">菜心、蒜末、盐、食用油</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-tint text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">冬瓜海带汤</h4>
+                  <p class="text-sm text-neutral-500 mt-1">冬瓜、海带、排骨、姜片</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-5 pt-4 border-t border-neutral-100">
+              <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center">
+                  <img src="https://picsum.photos/id/22/200" alt="王小红头像" class="w-6 h-6 rounded-full mr-2">
+                  <span class="text-sm">值班：王小红</span>
+                </div>
+                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">待采购</span>
+              </div>
+              
+              <div class="flex justify-between items-center">
+                <div class="flex space-x-2">
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-green-700">
+                    <i class="fa fa-thumbs-up mr-1"></i>
+                    <span>好吃</span>
+                  </button>
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-neutral-700">
+                    <i class="fa fa-thumbs-down mr-1"></i>
+                    <span>一般</span>
+                  </button>
+                </div>
+                <button class="text-primary text-sm hover:text-primary/80">编辑</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 周五菜单 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.5s">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold">周五</h3>
+            </div>
+            
+            <div class="space-y-4">
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-cutlery text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">回锅肉</h4>
+                  <p class="text-sm text-neutral-500 mt-1">五花肉、青椒、蒜苗、豆瓣酱</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-leaf text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">凉拌黄瓜</h4>
+                  <p class="text-sm text-neutral-500 mt-1">黄瓜、蒜、醋、香油、辣椒油</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-tint text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">玉米排骨汤</h4>
+                  <p class="text-sm text-neutral-500 mt-1">排骨、玉米、胡萝卜、姜片</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-5 pt-4 border-t border-neutral-100">
+              <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center">
+                  <img src="https://picsum.photos/id/22/200" alt="王小红头像" class="w-6 h-6 rounded-full mr-2">
+                  <span class="text-sm">值班：王小红</span>
+                </div>
+                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">待采购</span>
+              </div>
+              
+              <div class="flex justify-between items-center">
+                <div class="flex space-x-2">
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-green-700">
+                    <i class="fa fa-thumbs-up mr-1"></i>
+                    <span>好吃</span>
+                  </button>
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-neutral-700">
+                    <i class="fa fa-thumbs-down mr-1"></i>
+                    <span>一般</span>
+                  </button>
+                </div>
+                <button class="text-primary text-sm hover:text-primary/80">编辑</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 周六菜单 -->
+          <div class="bg-white rounded-xl p-5 card-shadow card-hover animate-slide-up" style="animation-delay: 0.6s">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold">周六</h3>
+            </div>
+            
+            <div class="space-y-4">
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-cutlery text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">番茄炒蛋</h4>
+                  <p class="text-sm text-neutral-500 mt-1">番茄、鸡蛋、糖、盐、食用油</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-leaf text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">炒时蔬</h4>
+                  <p class="text-sm text-neutral-500 mt-1">空心菜、蒜末、盐、食用油</p>
+                </div>
+              </div>
+              
+              <div class="flex items-start">
+                <div class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center mr-3 mt-1">
+                  <i class="fa fa-tint text-neutral-500"></i>
+                </div>
+                <div class="flex-1">
+                  <h4 class="font-medium">紫菜蛋花汤</h4>
+                  <p class="text-sm text-neutral-500 mt-1">紫菜、鸡蛋、葱花、盐</p>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-5 pt-4 border-t border-neutral-100">
+              <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center">
+                  <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-6 h-6 rounded-full mr-2">
+                  <span class="text-sm">值班：李华</span>
+                </div>
+                <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">待采购</span>
+              </div>
+              
+              <div class="flex justify-between items-center">
+                <div class="flex space-x-2">
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-green-700">
+                    <i class="fa fa-thumbs-up mr-1"></i>
+                    <span>好吃</span>
+                  </button>
+                  <button class="text-sm flex items-center text-neutral-600 hover:text-neutral-700">
+                    <i class="fa fa-thumbs-down mr-1"></i>
+                    <span>一般</span>
+                  </button>
+                </div>
+                <button class="text-primary text-sm hover:text-primary/80">编辑</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 采购清单页 -->
+      <section id="shopping" class="space-y-6 hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">采购清单</h2>
+            <p class="text-neutral-500">2023年6月第3周 · 按市场分类</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex space-x-3">
+            <button class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center">
+              <i class="fa fa-check-square-o mr-2"></i>
+              <span>标记已采购</span>
+            </button>
+            <button class="px-4 py-2 bg-white text-neutral-700 rounded-lg border border-neutral-300 hover:bg-neutral-50 transition-colors shadow-sm">
+              <i class="fa fa-print mr-2"></i>
+              <span>打印清单</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 采购进度 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+            <p class="text-neutral-500 text-sm">总采购项</p>
+            <h3 class="text-2xl font-bold mt-1">24项</h3>
+            <div class="mt-3">
+              <div class="flex justify-between text-xs mb-1">
+                <span>完成进度</span>
+                <span>38%</span>
+              </div>
+              <div class="progress-bar" style="--progress: 38%"></div>
+            </div>
+          </div>
+          
+          <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+            <p class="text-neutral-500 text-sm">已采购</p>
+            <h3 class="text-2xl font-bold mt-1 text-green-500">9项</h3>
+            <p class="text-xs text-neutral-500 mt-3">最后更新：今天 10:23</p>
+          </div>
+          
+          <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+            <p class="text-neutral-500 text-sm">待采购</p>
+            <h3 class="text-2xl font-bold mt-1 text-secondary">15项</h3>
+            <p class="text-xs text-neutral-500 mt-3">建议今天完成采购</p>
+          </div>
+        </div>
+        
+        <!-- 按市场分类的采购清单 -->
+        <div class="space-y-6 animate-slide-up">
+          <!-- 海吉星集贸市场 -->
+          <div class="bg-white rounded-xl overflow-hidden card-shadow">
+            <div class="bg-blue-50 px-5 py-4 border-b border-blue-100">
+              <div class="flex items-center">
+                <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                  <i class="fa fa-shopping-bag text-blue-500"></i>
+                </div>
+                <h3 class="font-bold">海吉星集贸市场</h3>
+                <span class="ml-3 text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full">10项</span>
+              </div>
+              <p class="text-sm text-neutral-500 mt-1">开放时间：6:00-18:00 · 建议周三上午采购</p>
+            </div>
+            
+            <div class="divide-y divide-neutral-100">
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary" checked>
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">五花肉</h4>
+                  <p class="text-sm text-neutral-500">2kg · 用于红烧肉、回锅肉</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥36</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary" checked>
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">鲈鱼</h4>
+                  <p class="text-sm text-neutral-500">2条 · 约1.5kg · 用于清蒸鲈鱼</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥45</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary">
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">排骨</h4>
+                  <p class="text-sm text-neutral-500">1kg · 用于玉米排骨汤、冬瓜丸子汤</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥32</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary">
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">鸡肉</h4>
+                  <p class="text-sm text-neutral-500">1kg · 用于宫保鸡丁</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥28</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary">
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">猪肉馅</h4>
+                  <p class="text-sm text-neutral-500">500g · 用于冬瓜丸子汤</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥15</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+            </div>
+            
+            <div class="p-4 bg-neutral-50 border-t border-neutral-100">
+              <div class="flex justify-between items-center">
+                <span class="font-medium">小计：</span>
+                <span class="font-bold">¥156</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 钱大妈包桌菜 -->
+          <div class="bg-white rounded-xl overflow-hidden card-shadow">
+            <div class="bg-green-50 px-5 py-4 border-b border-green-100">
+              <div class="flex items-center">
+                <div class="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center mr-3">
+                  <i class="fa fa-shopping-basket text-green-500"></i>
+                </div>
+                <h3 class="font-bold">钱大妈包桌菜</h3>
+                <span class="ml-3 text-sm bg-green-100 text-green-700 px-2 py-1 rounded-full">8项</span>
+              </div>
+              <p class="text-sm text-neutral-500 mt-1">开放时间：7:00-22:00 · 建议今日下班采购</p>
+            </div>
+            
+            <div class="divide-y divide-neutral-100">
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary" checked>
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">青菜</h4>
+                  <p class="text-sm text-neutral-500">500g · 用于清炒时蔬</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥5</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary">
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">西兰花</h4>
+                  <p class="text-sm text-neutral-500">1个 · 用于蒜蓉西兰花</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥6</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary">
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">番茄</h4>
+                  <p class="text-sm text-neutral-500">5个 · 用于番茄炒蛋、番茄蛋汤</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥8</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary">
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">黄瓜</h4>
+                  <p class="text-sm text-neutral-500">3根 · 用于凉拌黄瓜、宫保鸡丁</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥4</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+            </div>
+            
+            <div class="p-4 bg-neutral-50 border-t border-neutral-100">
+              <div class="flex justify-between items-center">
+                <span class="font-medium">小计：</span>
+                <span class="font-bold">¥23</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 其他市场 -->
+          <div class="bg-white rounded-xl overflow-hidden card-shadow">
+            <div class="bg-purple-50 px-5 py-4 border-b border-purple-100">
+              <div class="flex items-center">
+                <div class="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-3">
+                  <i class="fa fa-shopping-cart text-purple-500"></i>
+                </div>
+                <h3 class="font-bold">其他市场</h3>
+                <span class="ml-3 text-sm bg-purple-100 text-purple-700 px-2 py-1 rounded-full">6项</span>
+              </div>
+              <p class="text-sm text-neutral-500 mt-1">便利店或超市 · 随时可采购</p>
+            </div>
+            
+            <div class="divide-y divide-neutral-100">
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary" checked>
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">鸡蛋</h4>
+                  <p class="text-sm text-neutral-500">1盒 · 用于紫菜蛋花汤、番茄炒蛋</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥12</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary">
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">紫菜</h4>
+                  <p class="text-sm text-neutral-500">1包 · 用于紫菜蛋花汤</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥5</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+              
+              <div class="p-4 flex items-center">
+                <input type="checkbox" class="w-5 h-5 text-primary rounded focus:ring-primary">
+                <div class="ml-4 flex-1">
+                  <h4 class="font-medium">花生米</h4>
+                  <p class="text-sm text-neutral-500">200g · 用于宫保鸡丁</p>
+                </div>
+                <div class="ml-4 text-right">
+                  <p class="font-medium">¥6</p>
+                  <input type="text" class="w-16 mt-1 text-sm px-2 py-1 border border-neutral-200 rounded" placeholder="实际价格">
+                </div>
+              </div>
+            </div>
+            
+            <div class="p-4 bg-neutral-50 border-t border-neutral-100">
+              <div class="flex justify-between items-center">
+                <span class="font-medium">小计：</span>
+                <span class="font-bold">¥23</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 总计 -->
+        <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="text-neutral-500">预计总金额</p>
+              <p class="text-2xl font-bold mt-1">¥202</p>
+            </div>
+            <div>
+              <p class="text-neutral-500">已记录金额</p>
+              <p class="text-xl font-bold mt-1 text-green-500">¥98</p>
+            </div>
+            <div>
+              <button class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center">
+                <i class="fa fa-save mr-2"></i>
+                <span>保存采购记录</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 值班安排页 -->
+      <section id="duty" class="space-y-6 hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">值班安排</h2>
+            <p class="text-neutral-500">2023年6月第3周 · 6月19日-6月25日</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex space-x-3">
+            <button class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center">
+              <i class="fa fa-refresh mr-2"></i>
+              <span>自动排班</span>
+            </button>
+            <button class="px-4 py-2 bg-white text-neutral-700 rounded-lg border border-neutral-300 hover:bg-neutral-50 transition-colors shadow-sm">
+              <i class="fa fa-pencil mr-2"></i>
+              <span>手动调整</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 当前值班人卡片 -->
+        <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+          <div class="flex flex-col md:flex-row md:items-center">
+            <div class="w-20 h-20 rounded-full overflow-hidden border-4 border-primary mb-4 md:mb-0 md:mr-6">
+              <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-full h-full object-cover">
+            </div>
+            <div class="flex-1">
+              <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h3 class="text-xl font-bold">李华 <span class="text-sm bg-primary text-white px-2 py-1 rounded-full ml-2">当前值班</span></h3>
+                  <p class="text-neutral-500 mt-1">负责日期：6月19日 - 6月25日</p>
+                </div>
+                <div class="mt-3 md:mt-0 flex space-x-2">
+                  <button class="px-3 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors flex items-center">
+                    <i class="fa fa-phone mr-1"></i>
+                    <span>联系</span>
+                  </button>
+                  <button class="px-3 py-1 bg-neutral-100 text-neutral-700 rounded-lg hover:bg-neutral-200 transition-colors flex items-center">
+                    <i class="fa fa-exchange mr-1"></i>
+                    <span>换班</span>
+                  </button>
+                </div>
+              </div>
+              
+              <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="flex items-center p-3 bg-neutral-50 rounded-lg">
+                  <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
+                    <i class="fa fa-check text-green-500"></i>
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium">本周已完成</p>
+                    <p class="text-xs text-neutral-500">1天 / 6天</p>
+                  </div>
+                </div>
+                
+                <div class="flex items-center p-3 bg-neutral-50 rounded-lg">
+                  <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                    <i class="fa fa-shopping-cart text-blue-500"></i>
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium">采购完成率</p>
+                    <p class="text-xs text-neutral-500">38% 本周</p>
+                  </div>
+                </div>
+                
+                <div class="flex items-center p-3 bg-neutral-50 rounded-lg">
+                  <div class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center mr-3">
+                    <i class="fa fa-star text-orange-500"></i>
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium">平均评分</p>
+                    <p class="text-xs text-neutral-500">4.7 / 5.0</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 本周值班表 -->
+        <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+          <h3 class="font-bold mb-4">本周值班表</h3>
+          
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-neutral-200">
+                  <th class="text-left py-3 px-4 font-medium text-neutral-500">日期</th>
+                  <th class="text-left py-3 px-4 font-medium text-neutral-500">星期</th>
+                  <th class="text-left py-3 px-4 font-medium text-neutral-500">值班人</th>
+                  <th class="text-left py-3 px-4 font-medium text-neutral-500">状态</th>
+                  <th class="text-left py-3 px-4 font-medium text-neutral-500">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-b border-neutral-100 bg-primary/5">
+                  <td class="py-3 px-4">6月19日</td>
+                  <td class="py-3 px-4">周一</td>
+                  <td class="py-3 px-4">
+                    <div class="flex items-center">
+                      <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-6 h-6 rounded-full mr-2">
+                      <span>李华</span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4">
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">已完成</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <button class="text-primary text-sm hover:text-primary/80">详情</button>
+                  </td>
+                </tr>
+                
+                <tr class="border-b border-neutral-100">
+                  <td class="py-3 px-4">6月20日</td>
+                  <td class="py-3 px-4">周二</td>
+                  <td class="py-3 px-4">
+                    <div class="flex items-center">
+                      <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-6 h-6 rounded-full mr-2">
+                      <span>李华</span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4">
+                    <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">进行中</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <button class="text-primary text-sm hover:text-primary/80">详情</button>
+                  </td>
+                </tr>
+                
+                <tr class="border-b border-neutral-100">
+                  <td class="py-3 px-4">6月21日</td>
+                  <td class="py-3 px-4">周三</td>
+                  <td class="py-3 px-4">
+                    <div class="flex items-center">
+                      <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-6 h-6 rounded-full mr-2">
+                      <span>李华</span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4">
+                    <span class="text-xs bg-neutral-100 text-neutral-700 px-2 py-1 rounded-full">未开始</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <button class="text-primary text-sm hover:text-primary/80">详情</button>
+                  </td>
+                </tr>
+                
+                <tr class="border-b border-neutral-100">
+                  <td class="py-3 px-4">6月22日</td>
+                  <td class="py-3 px-4">周四</td>
+                  <td class="py-3 px-4">
+                    <div class="flex items-center">
+                      <img src="https://picsum.photos/id/22/200" alt="王小红头像" class="w-6 h-6 rounded-full mr-2">
+                      <span>王小红</span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4">
+                    <span class="text-xs bg-neutral-100 text-neutral-700 px-2 py-1 rounded-full">未开始</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <button class="text-primary text-sm hover:text-primary/80">详情</button>
+                  </td>
+                </tr>
+                
+                <tr class="border-b border-neutral-100">
+                  <td class="py-3 px-4">6月23日</td>
+                  <td class="py-3 px-4">周五</td>
+                  <td class="py-3 px-4">
+                    <div class="flex items-center">
+                      <img src="https://picsum.photos/id/22/200" alt="王小红头像" class="w-6 h-6 rounded-full mr-2">
+                      <span>王小红</span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4">
+                    <span class="text-xs bg-neutral-100 text-neutral-700 px-2 py-1 rounded-full">未开始</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <button class="text-primary text-sm hover:text-primary/80">详情</button>
+                  </td>
+                </tr>
+                
+                <tr>
+                  <td class="py-3 px-4">6月24日</td>
+                  <td class="py-3 px-4">周六</td>
+                  <td class="py-3 px-4">
+                    <div class="flex items-center">
+                      <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-6 h-6 rounded-full mr-2">
+                      <span>李华</span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-4">
+                    <span class="text-xs bg-neutral-100 text-neutral-700 px-2 py-1 rounded-full">未开始</span>
+                  </td>
+                  <td class="py-3 px-4">
+                    <button class="text-primary text-sm hover:text-primary/80">详情</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <!-- 常驻人员列表 -->
+        <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold">常驻人员 (5人)</h3>
+            <button class="text-primary text-sm hover:text-primary/80 flex items-center">
+              <i class="fa fa-plus mr-1"></i>
+              <span>添加成员</span>
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div class="p-4 border border-primary rounded-lg bg-primary/5 text-center card-hover">
+              <div class="w-16 h-16 rounded-full overflow-hidden mx-auto mb-3 border-2 border-primary">
+                <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-full h-full object-cover">
+              </div>
+              <h4 class="font-medium">李华</h4>
+              <p class="text-xs text-neutral-500 mt-1">本周值班</p>
+              <div class="mt-3 flex justify-center space-x-2">
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-phone"></i>
+                </button>
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-envelope"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="p-4 border border-neutral-200 rounded-lg text-center card-hover">
+              <div class="w-16 h-16 rounded-full overflow-hidden mx-auto mb-3 border-2 border-neutral-200">
+                <img src="https://picsum.photos/id/22/200" alt="王小红头像" class="w-full h-full object-cover">
+              </div>
+              <h4 class="font-medium">王小红</h4>
+              <p class="text-xs text-neutral-500 mt-1">本周值班</p>
+              <div class="mt-3 flex justify-center space-x-2">
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-phone"></i>
+                </button>
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-envelope"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="p-4 border border-neutral-200 rounded-lg text-center card-hover">
+              <div class="w-16 h-16 rounded-full overflow-hidden mx-auto mb-3 border-2 border-neutral-200">
+                <img src="https://picsum.photos/id/64/200" alt="张小明头像" class="w-full h-full object-cover">
+              </div>
+              <h4 class="font-medium">张小明</h4>
+              <p class="text-xs text-neutral-500 mt-1">管理员</p>
+              <div class="mt-3 flex justify-center space-x-2">
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-phone"></i>
+                </button>
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-envelope"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="p-4 border border-neutral-200 rounded-lg text-center card-hover">
+              <div class="w-16 h-16 rounded-full overflow-hidden mx-auto mb-3 border-2 border-neutral-200">
+                <img src="https://picsum.photos/id/93/200" alt="赵小刚头像" class="w-full h-full object-cover">
+              </div>
+              <h4 class="font-medium">赵小刚</h4>
+              <p class="text-xs text-neutral-500 mt-1">下周值班</p>
+              <div class="mt-3 flex justify-center space-x-2">
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-phone"></i>
+                </button>
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-envelope"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="p-4 border border-neutral-200 rounded-lg text-center card-hover">
+              <div class="w-16 h-16 rounded-full overflow-hidden mx-auto mb-3 border-2 border-neutral-200">
+                <img src="https://picsum.photos/id/65/200" alt="陈小雨头像" class="w-full h-full object-cover">
+              </div>
+              <h4 class="font-medium">陈小雨</h4>
+              <p class="text-xs text-neutral-500 mt-1">下周值班</p>
+              <div class="mt-3 flex justify-center space-x-2">
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-phone"></i>
+                </button>
+                <button class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600 hover:bg-neutral-200">
+                  <i class="fa fa-envelope"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 支出记录页 -->
+      <section id="expenses" class="space-y-6 hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">支出记录</h2>
+            <p class="text-neutral-500">2023年6月第3周 · 6月19日-6月25日</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex space-x-3">
+            <button id="add-expense" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center">
+              <i class="fa fa-plus mr-2"></i>
+              <span>添加支出</span>
+            </button>
+            <button class="px-4 py-2 bg-white text-neutral-700 rounded-lg border border-neutral-300 hover:bg-neutral-50 transition-colors shadow-sm">
+              <i class="fa fa-filter mr-2"></i>
+              <span>筛选</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 支出统计 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+            <p class="text-neutral-500 text-sm">本周总支出</p>
+            <h3 class="text-2xl font-bold mt-1">¥850</h3>
+            <p class="text-green-500 text-sm mt-2 flex items-center">
+              <i class="fa fa-arrow-down mr-1"></i>
+              <span>12% 较上周</span>
+            </p>
+          </div>
+          
+          <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+            <p class="text-neutral-500 text-sm">日均支出</p>
+            <h3 class="text-2xl font-bold mt-1">¥142</h3>
+            <p class="text-neutral-500 text-sm mt-2 flex items-center">
+              <i class="fa fa-calendar mr-1"></i>
+              <span>6天计算</span>
+            </p>
+          </div>
+          
+          <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+            <p class="text-neutral-500 text-sm">支出分类占比</p>
+            <div class="mt-3 flex items-center">
+              <div class="w-2 h-2 rounded-full bg-red-500 mr-2"></div>
+              <span class="text-sm mr-4">肉类 65%</span>
+              <div class="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
+              <span class="text-sm mr-4">蔬菜 20%</span>
+              <div class="w-2 h-2 rounded-full bg-blue-500 mr-2"></div>
+              <span class="text-sm">其他 15%</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 支出记录列表 -->
+        <div class="bg-white rounded-xl overflow-hidden card-shadow animate-slide-up">
+          <div class="p-5 border-b border-neutral-100">
+            <h3 class="font-bold">支出明细</h3>
+          </div>
+          
+          <div class="divide-y divide-neutral-100">
+            <div class="p-5 flex flex-col md:flex-row md:items-center">
+              <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4 flex-shrink-0">
+                <i class="fa fa-cutlery text-red-500"></i>
+              </div>
+              <div class="flex-1 mb-4 md:mb-0">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                  <h4 class="font-medium">海吉星采购肉类</h4>
+                  <span class="text-lg font-bold text-red-500 mt-2 md:mt-0">¥280</span>
+                </div>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between mt-2">
+                  <p class="text-sm text-neutral-500">五花肉、鲈鱼、排骨</p>
+                  <div class="flex items-center mt-1 md:mt-0">
+                    <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-5 h-5 rounded-full mr-2">
+                    <span class="text-sm text-neutral-500">李华 · 今天 09:45</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex space-x-2">
+                <button class="text-primary hover:text-primary/80">
+                  <i class="fa fa-picture-o"></i>
+                </button>
+                <button class="text-neutral-500 hover:text-neutral-700">
+                  <i class="fa fa-edit"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="p-5 flex flex-col md:flex-row md:items-center">
+              <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mr-4 flex-shrink-0">
+                <i class="fa fa-leaf text-green-500"></i>
+              </div>
+              <div class="flex-1 mb-4 md:mb-0">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                  <h4 class="font-medium">钱大妈采购蔬菜</h4>
+                  <span class="text-lg font-bold text-red-500 mt-2 md:mt-0">¥65</span>
+                </div>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between mt-2">
+                  <p class="text-sm text-neutral-500">青菜、番茄、黄瓜</p>
+                  <div class="flex items-center mt-1 md:mt-0">
+                    <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-5 h-5 rounded-full mr-2">
+                    <span class="text-sm text-neutral-500">李华 · 今天 18:30</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex space-x-2">
+                <button class="text-primary hover:text-primary/80">
+                  <i class="fa fa-picture-o"></i>
+                </button>
+                <button class="text-neutral-500 hover:text-neutral-700">
+                  <i class="fa fa-edit"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="p-5 flex flex-col md:flex-row md:items-center">
+              <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-4 flex-shrink-0">
+                <i class="fa fa-shopping-basket text-blue-500"></i>
+              </div>
+              <div class="flex-1 mb-4 md:mb-0">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                  <h4 class="font-medium">超市采购调味品</h4>
+                  <span class="text-lg font-bold text-red-500 mt-2 md:mt-0">¥45</span>
+                </div>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between mt-2">
+                  <p class="text-sm text-neutral-500">酱油、醋、盐、糖</p>
+                  <div class="flex items-center mt-1 md:mt-0">
+                    <img src="https://picsum.photos/id/91/200" alt="李华头像" class="w-5 h-5 rounded-full mr-2">
+                    <span class="text-sm text-neutral-500">李华 · 昨天 20:15</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex space-x-2">
+                <button class="text-primary hover:text-primary/80">
+                  <i class="fa fa-picture-o"></i>
+                </button>
+                <button class="text-neutral-500 hover:text-neutral-700">
+                  <i class="fa fa-edit"></i>
+                </button>
+              </div>
+            </div>
+            
+            <div class="p-5 flex flex-col md:flex-row md:items-center">
+              <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mr-4 flex-shrink-0">
+                <i class="fa fa-cutlery text-red-500"></i>
+              </div>
+              <div class="flex-1 mb-4 md:mb-0">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                  <h4 class="font-medium">海吉星采购肉类</h4>
+                  <span class="text-lg font-bold text-red-500 mt-2 md:mt-0">¥460</span>
+                </div>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between mt-2">
+                  <p class="text-sm text-neutral-500">鸡肉、猪肉馅、牛肉</p>
+                  <div class="flex items-center mt-1 md:mt-0">
+                    <img src="https://picsum.photos/id/22/200" alt="王小红头像" class="w-5 h-5 rounded-full mr-2">
+                    <span class="text-sm text-neutral-500">王小红 · 6月18日 10:20</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex space-x-2">
+                <button class="text-primary hover:text-primary/80">
+                  <i class="fa fa-picture-o"></i>
+                </button>
+                <button class="text-neutral-500 hover:text-neutral-700">
+                  <i class="fa fa-edit"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="p-5 bg-neutral-50 border-t border-neutral-100 flex justify-between items-center">
+            <span class="font-medium">共4条记录</span>
+            <div class="flex space-x-2">
+              <button class="px-3 py-1 bg-white border border-neutral-200 rounded hover:bg-neutral-50 disabled:opacity-50" disabled>
+                <i class="fa fa-angle-left"></i>
+              </button>
+              <button class="px-3 py-1 bg-primary text-white rounded">1</button>
+              <button class="px-3 py-1 bg-white border border-neutral-200 rounded hover:bg-neutral-50">2</button>
+              <button class="px-3 py-1 bg-white border border-neutral-200 rounded hover:bg-neutral-50">
+                <i class="fa fa-angle-right"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- 本周结算页 -->
+      <section id="settlement" class="space-y-6 hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">本周结算</h2>
+            <p class="text-neutral-500">2023年6月第3周 · 6月19日-6月25日</p>
+          </div>
+          <div class="mt-4 md:mt-0 flex space-x-3">
+            <button class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors shadow-sm flex items-center">
+              <i class="fa fa-refresh mr-2"></i>
+              <span>重新计算</span>
+            </button>
+            <button class="px-4 py-2 bg-white text-neutral-700 rounded-lg border border-neutral-300 hover:bg-neutral-50 transition-colors shadow-sm">
+              <i class="fa fa-share-alt mr-2"></i>
+              <span>分享账单</span>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 结算概览 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="bg-white rounded-xl p-5 card-shadow animate-slide-up">
+            <p class="text-neutral-500 text-sm">本周总支出</p>
+            <h3 class="text-2xl font-bold mt-1">¥850</h3>
+            <div class="mt-3">
+              <div class="flex justify-between text-xs mb-1">
+                <span>预算使用</span>
+                <span>71%</span>
+              </div>
+              <div class="progress-bar" style="--progress: 71%"></div>
+            </div>
+          </div>
+          
+          <!-- 其他结算内容省略 -->
+        </div>
+      </section>
+      
+      <!-- 历史记录页 -->
+      <section id="history" class="space-y-6 hidden">
+        <div>
+          <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">历史记录</h2>
+          <p class="text-neutral-500">查看过去的伙食管理记录</p>
+        </div>
+        
+        <!-- 历史记录内容 -->
+        <div class="bg-white rounded-xl p-5 card-shadow">
+          <p class="text-center text-neutral-500 py-10">历史记录内容将在这里显示</p>
+        </div>
+      </section>
+      
+      <!-- 公告提醒
