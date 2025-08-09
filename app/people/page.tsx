@@ -122,13 +122,7 @@ export default function PeoplePage() {
         const j3 = await r3.json();
         setDutyWeek(j3.item || null);
       } catch {}
-      try {
-        const r4 = await fetch(`/api/duty/staff?year=${assignYear}&month=${assignMonth}`);
-        const j4 = await r4.json();
-        const map: Record<string, number|null> = {};
-        (j4.items || []).forEach((x: any) => { map[x.member_id] = x.week_in_month ?? null; });
-        setStaffAssign(map);
-      } catch {}
+      try { await reloadAssignments(assignYear, assignMonth); } catch {}
       try { await reloadPayStatus(assignYear, assignMonth); } catch {}
     })();
   }, []);
@@ -165,18 +159,8 @@ export default function PeoplePage() {
                 </div>
                 <div className="text-right col-span-1 flex items-center justify-end gap-3">
                   {/* 付费标记（钱币表情） */}
-                  <label className="inline-flex items-center gap-1" title="是否已付">
-                    <input
-                      type="checkbox"
-                      checked={!!payMap[m.id]}
-                      onChange={async(e)=>{
-                        const checked = e.target.checked;
-                        setPayMap(prev => ({ ...prev, [m.id]: checked }));
-                        await fetch('/api/members/pay', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member_id: m.id, year: assignYear, month: assignMonth, paid: checked }) });
-                      }}
-                    />
-                    <span role="img" aria-label="paid">💰</span>
-                  </label>
+                  {/* 付款标记入口移除：仅保留值班相关，不显示钱袋子 */}
+
                   {/* 值班人员标记 */}
                   <label className="inline-flex items-center gap-1 text-primary">
                     <input type="checkbox"
@@ -281,8 +265,14 @@ export default function PeoplePage() {
                         setStaffAssign(prev => ({ ...prev, [m.id]: v }));
                         (async()=>{
                           if (v === null) {
-                            // 选择“未分配”仅更新 UI，不自动删除；等待用户点击“移除”按钮
+                            // 未分配：保存到服务端为 0，并保持本地为 null
+                            await fetch('/api/duty/staff', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ member_id: m.id, week_in_month: 0, year: assignYear, month: assignMonth })
+                            });
                             writeLocal(assignYear, assignMonth, { ...staffAssign, [m.id]: null }, { ...staffSet });
+                            await reloadAssignments(assignYear, assignMonth);
                             return;
                           }
                           await fetch('/api/duty/staff', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member_id: m.id, week_in_month: v, year: assignYear, month: assignMonth }) });

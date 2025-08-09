@@ -66,7 +66,8 @@ export async function GET(req: NextRequest) {
           member_id: a.member_id,
           name: m?.name || "未知",
           role: (m?.role as string) || "成员",
-          week_in_month: a.week_in_month,
+          // 服务端以 0 表示“未分配”，前端用 null 展示“未分配”
+          week_in_month: a.week_in_month === 0 ? null : a.week_in_month,
         };
       });
 
@@ -85,7 +86,8 @@ export async function POST(req: NextRequest) {
     const week_in_month: number = Number(body.week_in_month);
     const year: number = Number(body.year) || new Date().getFullYear();
     const month: number = Number(body.month) || new Date().getMonth() + 1;
-    if (!member_id || !week_in_month || week_in_month < 1 || week_in_month > 4) {
+    // 允许 0..4，其中 0 表示“未分配”
+    if (!member_id || Number.isNaN(week_in_month) || week_in_month < 0 || week_in_month > 4) {
       return NextResponse.json({ error: "member_id/week_in_month 无效" }, { status: 400 });
     }
 
