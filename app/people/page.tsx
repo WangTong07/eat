@@ -44,13 +44,28 @@ export default function PeoplePage() {
     try {
       const r = await fetch(`/api/duty/staff?year=${year}&month=${month}`);
       const j = await r.json();
-      const map: Record<string, number|null> = {};
-      const present: Record<string, boolean> = {};
-      (j.items || []).forEach((x: any) => { map[x.member_id] = x.week_in_month ?? null; present[x.member_id] = true; });
-      if ((j.items || []).length === 0) {
-        const loc = readLocal(year, month);
-        setStaffAssign(loc.map); setStaffSet(loc.present);
-      } else { setStaffAssign(map); setStaffSet(present); writeLocal(year, month, map, present); }
+      // 服务端返回的当前分配
+      const serverMap: Record<string, number|null> = {};
+      const serverPresent: Record<string, boolean> = {};
+      (j.items || []).forEach((x: any) => { serverMap[x.member_id] = x.week_in_month ?? null; serverPresent[x.member_id] = true; });
+
+      // 本地缓存（包含“未分配”的 null 值），用于覆盖服务端
+      const local = readLocal(year, month);
+
+      // 合并：本地优先（特别是未分配 null），避免被服务端旧值覆盖
+      const mergedPresent: Record<string, boolean> = { ...serverPresent, ...local.present };
+      const mergedMap: Record<string, number|null> = {};
+      Object.keys(mergedPresent).forEach(id => {
+        if (id in local.map) {
+          mergedMap[id] = local.map[id]; // null 或 1-4，均以本地为准
+        } else {
+          mergedMap[id] = serverMap[id] ?? null;
+        }
+      });
+
+      setStaffAssign(mergedMap);
+      setStaffSet(mergedPresent);
+      writeLocal(year, month, mergedMap, mergedPresent);
     } catch {}
   };
   const reloadPayStatus = async (year: number, month: number) => {
