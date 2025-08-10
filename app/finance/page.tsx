@@ -1,7 +1,9 @@
 
 "use client";
 import Shell from "../dashboard/Shell";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { getSupabaseClient } from "@/lib/supabaseClient";
+import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 
 // 固定月费（按工作日分摊）
 const MONTH_PRICE = 920;
@@ -19,38 +21,86 @@ export default function FinancePage(){
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [showExpense, setShowExpense] = useState<boolean>(false);
   const [payRefreshKey, setPayRefreshKey] = useState<number>(0);
+  const [linkedBudget, setLinkedBudget] = useState<number>(0);
 
   const ym = useMemo(()=>{ const d=new Date(date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; },[date]);
   const [items,setItems]=useState<Expense[]>([]);
   const [weekly,setWeekly]=useState<Array<{week_number:number,amount_sum:number}>>([]);
 
-  async function fetchList(){
-    const r = await fetch(`/api/expenses?month=${ym}`);
-    const j = await r.json();
-    const serverItems: Expense[] = j.items || [];
-    // 合并本地兜底存储
-    try{
-      const localKey = `expenses_local_${ym}`;
-      const localRaw = localStorage.getItem(localKey);
-      const localItems: Expense[] = localRaw ? JSON.parse(localRaw) : [];
-      // 去重：以 id 为主，local 可能没有 id
-      const map = new Map<string, Expense>();
-      [...serverItems, ...localItems].forEach((it) => {
-        const k = String(it.id);
-        if(!map.has(k)) map.set(k, it);
-      });
-      setItems(Array.from(map.values()));
-    }catch{
-      setItems(serverItems);
+  const fetchList = useCallback(async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const [year, month] = ym.split('-').map(v => parseInt(v));
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
+      
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: false });
+      
+      if (error) throw error;
+      
+      setItems(data || []);
+      
+      // 清理本地兜底数据
+      try {
+        const localKey = `expenses_local_${ym}`;
+        localStorage.removeItem(localKey);
+      } catch {}
+    } catch (error) {
+      console.error('获取支出记录失败:', error);
+      setItems([]);
     }
-  }
-  async function fetchWeekly(){
-    const r = await fetch(`/api/expenses/weekly?month=${ym}`);
-    const j = await r.json();
-    setWeekly(j.items||[]);
-  }
+  }, [ym]);
+  const fetchWeekly = useCallback(async () => {
+    try {
+      const supabase = getSupabaseClient();
+      const [year, month] = ym.split('-').map(v => parseInt(v));
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
+      
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('week_number, amount')
+        .gte('date', startDate)
+        .lte('date', endDate);
+      
+      if (error) throw error;
+      
+      // 按周数汇总
+      const weekMap: Record<number, number> = {};
+      (data || []).forEach(item => {
+        if (item.week_number) {
+          weekMap[item.week_number] = (weekMap[item.week_number] || 0) + Number(item.amount || 0);
+        }
+      });
+      
+      const weeklyData = Object.keys(weekMap).map(weekNum => ({
+        week_number: parseInt(weekNum),
+        amount_sum: weekMap[parseInt(weekNum)]
+      })).sort((a, b) => a.week_number - b.week_number);
+      
+      setWeekly(weeklyData);
+    } catch (error) {
+      console.error('获取周汇总失败:', error);
+      setWeekly([]);
+    }
+  }, [ym]);
 
-  useEffect(()=>{ fetchList(); fetchWeekly(); },[ym]);
+  useEffect(()=>{ fetchList(); fetchWeekly(); },[fetchList, ym]);
+
+  // 添加实时订阅
+  useRealtimeSubscription({
+    table: 'expenses',
+    onChange: () => {
+      console.log('[FinancePage] 检测到支出记录变更，重新加载...');
+      fetchList();
+      fetchWeekly();
+    }
+  });
 
   // 计算 ISO 周编号，格式与后端一致：YYYYWW
   function isoWeekNumberFromString(dateStr: string): number {
@@ -129,58 +179,96 @@ export default function FinancePage(){
   }, [files]);
 
   async function onAdd(){
-    // 将文件转成可持久显示的 Data URL，便于直接在页面中展示
-    async function fileToDataUrl(file: File): Promise<string> {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+    try {
+      // 将文件转成可持久显示的 Data URL
+      async function fileToDataUrl(file: File): Promise<string> {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+      
+      const dataUrls = await Promise.all(files.map(fileToDataUrl));
+      const attachments = files.map((f, i) => ({ url: dataUrls[i], name: f.name }));
+      
+      // 计算周数
+      const dateObj = new Date(date);
+      const day = dateObj.getUTCDay() || 7;
+      dateObj.setUTCDate(dateObj.getUTCDate() + 4 - day);
+      const yearStart = new Date(Date.UTC(dateObj.getUTCFullYear(), 0, 1));
+      const week_number = Math.ceil(((dateObj.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+      const weekNumber = dateObj.getUTCFullYear() * 100 + week_number;
+      
+      // 直接插入数据库，确保实时同步
+      const supabase = getSupabaseClient();
+      
+      // 如果有图片，将第一张图片保存到 receipt_url 字段
+      let receiptUrl = null;
+      if (files.length > 0) {
+        const firstFile = files[0];
+        const dataUrl = await fileToDataUrl(firstFile);
+        receiptUrl = dataUrl;
+      }
+      
+      const { error } = await supabase.from('expenses').insert({
+        date,
+        item_description: desc,  // 使用数据库中的正确字段名
+        amount: parseFloat(amount || '0'),
+        user_name: handler,      // 使用数据库中的正确字段名
+        receipt_url: receiptUrl  // 保存图片到 receipt_url 字段
       });
+      
+      if (error) throw error;
+      
+      // 清空表单
+      setDesc("");
+      setAmount("");
+      setHandler("");
+      setFiles([]);
+      if (inputRef.current) inputRef.current.value = "";
+      
+      // 手动重新加载数据，确保界面立即更新
+      await fetchList();
+      await fetchWeekly();
+    } catch (error: any) {
+      console.error('添加支出失败:', error);
+      alert(`添加失败：${error.message}`);
     }
-    const dataUrls = await Promise.all(files.map(fileToDataUrl));
-    const attachments = files.map((f, i) => ({ url: dataUrls[i], name: f.name }));
-    const payload={ date, description:desc, amount:parseFloat(amount||'0'), handler, attachments };
-    // 先本地插入，提升可见性
-    const tempId = `local-${Date.now()}`;
-    const localItem: Expense = { id: tempId, date, description: desc, amount: payload.amount, handler, attachments } as any;
-    setItems((prev)=> [localItem, ...prev]);
-    try{
-      const localKey = `expenses_local_${ym}`;
-      const localRaw = localStorage.getItem(localKey);
-      const list: Expense[] = localRaw ? JSON.parse(localRaw) : [];
-      list.unshift(localItem);
-      localStorage.setItem(localKey, JSON.stringify(list));
-    }catch{}
-
-    // 后台持久化
-    const r = await fetch('/api/expenses',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
-    if(r.ok){ setDesc(""); setAmount(""); setHandler(""); setFiles([]); inputRef.current && (inputRef.current.value=""); await fetchWeekly(); }
   }
 
   async function onDelete(it: Expense){
-    // 先从 UI 删除
-    setItems((prev)=> prev.filter(x=> x !== it));
-    try{
-      const localKey = `expenses_local_${ym}`;
-      const localRaw = localStorage.getItem(localKey);
-      const list: Expense[] = localRaw ? JSON.parse(localRaw) : [];
-      const next = list.filter(x=> x.id !== it.id);
-      localStorage.setItem(localKey, JSON.stringify(next));
-    }catch{}
-
-    // 后端删除（如果有 id）
-    try{
-      await fetch(`/api/expenses?id=${encodeURIComponent(String(it.id))}&month=${ym}`, { method: 'DELETE' });
-    }catch{}
+    try {
+      const supabase = getSupabaseClient();
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', it.id);
+      
+      if (error) throw error;
+      
+      // 清理本地兜底数据
+      try {
+        const localKey = `expenses_local_${ym}`;
+        localStorage.removeItem(localKey);
+      } catch {}
+      
+      // 手动重新加载数据，确保界面立即更新
+      await fetchList();
+      await fetchWeekly();
+    } catch (error: any) {
+      console.error('删除支出失败:', error);
+      alert(`删除失败：${error.message}`);
+    }
   }
 
   return (
     <Shell>
       <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800 mb-4">财务 · 支出与结算</h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <MonthlySummary ym={ym} expenseItems={items} refreshKey={payRefreshKey} />
+      <div className="grid grid-cols-1 gap-4">
+        <PaymentStatsCard ym={ym} refreshKey={payRefreshKey} onBudgetChange={setLinkedBudget} expenseItems={items} />
       </div>
 
         <div className="ui-card rounded-xl p-5 mt-4">
@@ -264,26 +352,20 @@ export default function FinancePage(){
               <tr key={it.id}>
                 <td className="px-4 py-2">{it.date}</td>
                 <td className="px-4 py-2">
-                  <div>{it.description}</div>
-                  {Array.isArray(it.attachments) && it.attachments.length>0 && (
+                  <div>{(it as any).item_description || it.description}</div>
+                  {(it as any).receipt_url && (
                     <div className="flex flex-wrap gap-2 mt-1">
-                      {it.attachments
-                        .map((a)=> a && a.url ? a : null)
-                        .filter((a): a is {url:string,name?:string} => !!a && /^(data:|https?:|\/)/.test(a.url))
-                        .map((a,idx)=> (
-                          <img
-                            key={idx}
-                            src={a.url}
-                            alt={a.name||'附件'}
-                            className="h-10 w-10 object-cover rounded border cursor-pointer"
-                            onClick={()=> setViewerSrc(a.url)}
-                          />
-                        ))}
+                      <img
+                        src={(it as any).receipt_url}
+                        alt="收据"
+                        className="h-10 w-10 object-cover rounded border cursor-pointer"
+                        onClick={()=> setViewerSrc((it as any).receipt_url)}
+                      />
                     </div>
                   )}
                 </td>
                 <td className="px-4 py-2">¥{Number(it.amount||0).toFixed(2)}</td>
-                <td className="px-4 py-2">{it.handler||''}</td>
+                <td className="px-4 py-2">{(it as any).user_name || it.handler || ''}</td>
                 <td className="px-4 py-2 text-right">
                   <button
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-red-500 text-red-600 hover:bg-red-50 active:scale-95 transition select-none"
@@ -369,11 +451,14 @@ function MonthInsights({ ym, items, weekStart, weekEnd }: { ym: string; items: E
   );
 }
 
-// 月预算/支出/结余 + 明细
-function MonthlySummary({ ym, expenseItems, refreshKey }: { ym: string; expenseItems: Expense[]; refreshKey: number }){
-  const [budget, setBudget] = useState(0);
-  const [details, setDetails] = useState<Array<{name:string; amount:number; coverage:string; from?:string|null; to?:string|null}>>([]);
+// 缴费统计卡片组件
+function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym: string; refreshKey: number; onBudgetChange?: (budget: number) => void; expenseItems: Expense[] }){
+  const [totalMembers, setTotalMembers] = useState(0);
+  const [paidMembers, setPaidMembers] = useState(0);
+  const [unpaidMembers, setUnpaidMembers] = useState(0);
+  const [details, setDetails] = useState<Array<{name:string; paid:boolean; amount?:number}>>([]);
   const [open, setOpen] = useState(false);
+  const [totalBudget, setTotalBudget] = useState(0);
 
   useEffect(()=>{
     (async()=>{
@@ -385,81 +470,185 @@ function MonthlySummary({ ym, expenseItems, refreshKey }: { ym: string; expenseI
         ]);
         const pay = await payRes.json();
         const mem = await memRes.json();
-        const id2name: Record<string,string> = {};
-        (mem.items||[]).forEach((x: any)=>{ id2name[x.id]=x.name; });
-
-        const isWorkday = (d:Date)=>{ const k=d.getDay(); return k>=1 && k<=5; };
-        const monthWorkdays = (yy:number, mm:number)=>{ const first=new Date(yy,mm-1,1,12,0,0); const last=new Date(yy,mm,0,12,0,0); let c=0; const d=new Date(first); while(d<=last){ if(isWorkday(d)) c++; d.setDate(d.getDate()+1);} return c; };
-        const countWorkdays = (a:Date,b:Date)=>{ let c=0; const d=new Date(a); const end=new Date(b); while(d<=end){ if(isWorkday(d)) c++; d.setDate(d.getDate()+1);} return c; };
-        const toDate = (s:string)=>{ const [yy,mm,dd]=s.split('-').map(Number); return new Date(yy,mm-1,dd,12,0,0); };
-        const thisA = new Date(y, m-1, 1, 12,0,0); const thisB = new Date(y, m, 0, 12,0,0);
-        const clamp = (x:Date, a:Date, b:Date)=> new Date(Math.min(Math.max(x.getTime(), a.getTime()), b.getTime()));
-
-        let total=0; const det: Array<{name:string; amount:number; coverage:string; from?:string|null; to?:string|null}> = [];
-        (pay.items||[]).forEach((it:any)=>{
-          if(!it.paid) return;
-          let add = 0;
-          if(it.coverage === 'month'){
-            // 整月：直接使用录入金额（默认 920）
-            add = Math.round(Number(it.amount ?? MONTH_PRICE) || 0);
-          } else if(it.coverage === 'range' && it.from_date && it.to_date){
-            // 区间：按工作日比例分摊到本月
-            const amt = Number(it.amount || 0) || 0;
-            if (amt > 0) {
-              const s = toDate(String(it.from_date));
-              const e = toDate(String(it.to_date));
-              const totalDays = countWorkdays(s,e);
-              if (totalDays > 0) {
-                const ia = clamp(s, thisA, thisB);
-                const ib = clamp(e, thisA, thisB);
-                if (ia <= ib) {
-                  const overlap = countWorkdays(ia, ib);
-                  add = Math.round(amt * (overlap / totalDays));
-                }
-              }
-            }
-          }
-          if(add>0){ total += add; det.push({ name: id2name[it.member_id]||it.member_id, amount: add, coverage: it.coverage||'-', from: it.from_date||null, to: it.to_date||null }); }
+        
+        const members = mem.items || [];
+        const payments = pay.items || [];
+        
+        // 创建缴费状态映射
+        const paymentMap: Record<string, any> = {};
+        payments.forEach((p: any) => {
+          paymentMap[p.member_id] = p;
         });
-        setBudget(total);
-        setDetails(det.sort((a,b)=> b.amount-a.amount));
-      }catch{}
+        
+        // 统计缴费情况
+        const memberDetails = members.map((member: any) => {
+          const payment = paymentMap[member.id];
+          return {
+            name: member.name,
+            paid: payment ? payment.paid : false,
+            amount: payment ? payment.amount : null
+          };
+        });
+        
+        const total = members.length;
+        const paid = memberDetails.filter(m => m.paid).length;
+        const unpaid = total - paid;
+        
+        // 计算总预算（所有已缴费金额之和）
+        const budget = memberDetails.reduce((sum, member) => {
+          return sum + (member.paid && member.amount ? Number(member.amount) : 0);
+        }, 0);
+        
+        setTotalMembers(total);
+        setPaidMembers(paid);
+        setUnpaidMembers(unpaid);
+        setDetails(memberDetails);
+        setTotalBudget(budget);
+        
+        // 通知父组件预算变化
+        onBudgetChange && onBudgetChange(budget);
+      }catch{
+        setTotalMembers(0);
+        setPaidMembers(0);
+        setUnpaidMembers(0);
+        setDetails([]);
+        setTotalBudget(0);
+        onBudgetChange && onBudgetChange(0);
+      }
     })();
-  },[ym, refreshKey]);
+  },[ym, refreshKey, onBudgetChange]);
 
-  const expenseTotal = useMemo(()=> expenseItems
+  // 计算本月支出总额
+  const monthlySpend = expenseItems
     .filter(e=> typeof e.date==='string' && e.date.startsWith(ym+'-'))
-    .reduce((s,e)=> s + Number(e.amount||0), 0), [expenseItems, ym]);
-  const balance = useMemo(()=> budget - expenseTotal, [budget, expenseTotal]);
+    .reduce((s,e)=> s + Number(e.amount||0), 0);
+
+  // 计算结余
+  const remainingBudget = Math.max(totalBudget - monthlySpend, 0);
+  
+  // 计算使用百分比
+  const usagePercentage = totalBudget > 0 ? Math.min((monthlySpend / totalBudget) * 100, 100) : 0;
 
   return (
-    <div className="ui-card rounded-xl p-5 md:col-span-3">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div><div className="text-muted text-sm">月预算</div><div className="text-2xl font-bold">¥{Math.round(budget)}</div></div>
-        <div><div className="text-muted text-sm">支出</div><div className="text-2xl font-bold">¥{expenseTotal.toFixed(2)}</div></div>
-        <div><div className="text-muted text-sm">结余</div><div className="text-2xl font-bold">¥{Math.round(balance)}</div></div>
+    <div className="ui-card rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-lg font-bold text-neutral-800">本月预算概览</div>
+        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+          <span className="text-blue-600 text-lg">💰</span>
+        </div>
       </div>
-      <div className="mt-3">
-        <button className="badge badge-muted" onClick={()=> setOpen(o=>!o)}>{open? '收起明细' : '预算明细'}</button>
+      
+      {/* 预算/支出/结余显示 */}
+      <div className="text-3xl font-bold text-neutral-900 mb-1">
+        ¥{monthlySpend.toFixed(0)} / ¥{totalBudget.toFixed(0)}
+      </div>
+      <div className="w-full bg-neutral-200 rounded-full h-2 mb-3">
+        <div 
+          className={`h-2 rounded-full transition-all duration-300 ${
+            usagePercentage >= 90 ? 'bg-red-500' : 
+            usagePercentage >= 80 ? 'bg-orange-500' : 
+            'bg-green-500'
+          }`}
+          style={{ width: `${usagePercentage}%` }}
+        ></div>
+      </div>
+      <div className="text-sm text-neutral-600 mb-4">
+        结余: ¥{remainingBudget.toFixed(2)}
+      </div>
+
+      {/* 缴费统计 */}
+      <div className="grid grid-cols-3 gap-4 mb-3 pt-3 border-t border-neutral-200">
+        <div className="text-center">
+          <div className="text-muted text-xs">总人数</div>
+          <div className="text-lg font-bold">{totalMembers}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-muted text-xs">已交费</div>
+          <div className="text-lg font-bold text-green-600">{paidMembers}</div>
+        </div>
+        <div className="text-center">
+          <div className="text-muted text-xs">未交费</div>
+          <div className="text-lg font-bold text-red-600">{unpaidMembers}</div>
+        </div>
+      </div>
+      
+      <div>
+        <button className="badge badge-muted" onClick={()=> setOpen(o=>!o)}>
+          {open? '收起明细' : '缴费明细'}
+        </button>
       </div>
       {open && (
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full divide-y divide-neutral-200 text-sm">
-            <thead className="bg-neutral-50"><tr><th className="px-3 py-2 text-left">姓名</th><th className="px-3 py-2 text-left">方式</th><th className="px-3 py-2 text-left">区间</th><th className="px-3 py-2 text-right">计入本月</th></tr></thead>
+            <thead className="bg-neutral-50">
+              <tr>
+                <th className="px-3 py-2 text-left">姓名</th>
+                <th className="px-3 py-2 text-left">状态</th>
+                <th className="px-3 py-2 text-right">金额</th>
+              </tr>
+            </thead>
             <tbody>
-              {details.length===0 && <tr><td colSpan={4} className="px-3 py-3 text-muted text-center">本月暂无预算</td></tr>}
+              {details.length===0 && (
+                <tr>
+                  <td colSpan={3} className="px-3 py-3 text-muted text-center">暂无成员</td>
+                </tr>
+              )}
               {details.map((d,i)=> (
                 <tr key={i} className="border-b last:border-b-0">
                   <td className="px-3 py-2">{d.name}</td>
-                  <td className="px-3 py-2">{d.coverage==='month'?'整月':'区间'}</td>
-                  <td className="px-3 py-2">{d.coverage==='range'? `${d.from} ~ ${d.to}` : '-'}</td>
-                  <td className="px-3 py-2 text-right">¥{Math.round(d.amount)}</td>
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      d.paid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {d.paid ? '已交' : '未交'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {d.amount ? `¥${Number(d.amount).toFixed(0)}` : '-'}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+// 本月预算使用卡片组件
+function MonthlyBudgetCard({ ym, expenseItems, refreshKey, linkedBudget }: { ym: string; expenseItems: Expense[]; refreshKey: number; linkedBudget?: number }){
+  // 使用联动的预算数据，实时更新
+  const monthlyBudget = linkedBudget || 0;
+
+  // 计算本月支出总额，实时更新
+  const monthlySpend = expenseItems
+    .filter(e=> typeof e.date==='string' && e.date.startsWith(ym+'-'))
+    .reduce((s,e)=> s + Number(e.amount||0), 0);
+
+  const usagePercentage = monthlyBudget > 0 ? Math.min((monthlySpend / monthlyBudget) * 100, 100) : 0;
+
+  return (
+    <div className="ui-card rounded-xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-lg font-bold text-neutral-800">本月预算</div>
+        <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+          <span className="text-green-600 text-lg">💰</span>
+        </div>
+      </div>
+      <div className="text-3xl font-bold text-neutral-900 mb-1">
+        ¥{monthlySpend.toFixed(0)} / ¥{monthlyBudget.toFixed(0)}
+      </div>
+      <div className="w-full bg-neutral-200 rounded-full h-2 mb-3">
+        <div 
+          className={`h-2 rounded-full transition-all duration-300 ${
+            usagePercentage >= 90 ? 'bg-red-500' : 
+            usagePercentage >= 80 ? 'bg-orange-500' : 
+            'bg-green-500'
+          }`}
+          style={{ width: `${usagePercentage}%` }}
+        ></div>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
+import { getFreshExpenses, clearLocalFallbackData } from "@/lib/dataUtils";
 
 type Expense = {
   id: string;
@@ -21,19 +23,35 @@ export default function ExpenseTracker() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [list, setList] = useState<Expense[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
-  async function load() {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from("expenses")
-      .select("id, date, item_description, amount, user_name, receipt_url")
-      .order("date", { ascending: true });
-    if (!error) setList(data ?? []);
-  }
+  const load = useCallback(async () => {
+    try {
+      setSyncing(true);
+      const data = await getFreshExpenses();
+      setList(data ?? []);
+      
+      // 清理可能的本地兜底数据
+      clearLocalFallbackData();
+    } catch (error) {
+      console.error('加载费用记录失败:', error);
+    } finally {
+      setSyncing(false);
+    }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+
+  // 添加实时订阅
+  useRealtimeSubscription({
+    table: 'expenses',
+    onChange: () => {
+      console.log('[ExpenseTracker] 检测到费用记录变更，重新加载...');
+      load();
+    }
+  });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,25 +61,46 @@ export default function ExpenseTracker() {
       return;
     }
     setSubmitting(true);
-    const supabase = getSupabaseClient();
-    const { error } = await supabase.from("expenses").insert({
-      date: form.date,
-      item_description: form.item_description,
-      amount: Number(form.amount),
-      user_name: form.user_name,
-    });
-    if (error) setMessage(`保存失败：${error.message}`);
-    else {
+    
+    try {
+      const supabase = getSupabaseClient();
+      
+      // 计算周数
+      const dateObj = new Date(form.date);
+      const day = dateObj.getUTCDay() || 7;
+      dateObj.setUTCDate(dateObj.getUTCDate() + 4 - day);
+      const yearStart = new Date(Date.UTC(dateObj.getUTCFullYear(), 0, 1));
+      const week_number = Math.ceil(((dateObj.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+      const weekNumber = dateObj.getUTCFullYear() * 100 + week_number;
+      
+      // 直接插入数据库，确保实时同步
+      const { error } = await supabase.from("expenses").insert({
+        date: form.date,
+        item_description: form.item_description,
+        amount: Number(form.amount),
+        user_name: form.user_name,
+        week_number: weekNumber
+      });
+      
+      if (error) throw error;
+      
       setMessage("保存成功");
       setForm({ date: "", item_description: "", amount: "", user_name: "" });
-      await load();
+      
+      // 不需要手动调用 load()，实时订阅会自动更新
+    } catch (error: any) {
+      setMessage(`保存失败：${error.message}`);
     }
+    
     setSubmitting(false);
   }
 
   return (
     <section className="w-full">
-      <h2 className="text-lg font-semibold mb-3">支出记录</h2>
+      <h2 className="text-lg font-semibold mb-3">
+        支出记录
+        {syncing && <span className="ml-2 text-sm text-blue-600">🔄 同步中...</span>}
+      </h2>
       <form onSubmit={submit} className="grid gap-3 sm:grid-cols-5">
         <input
           type="date"

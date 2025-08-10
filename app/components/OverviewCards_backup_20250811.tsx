@@ -47,7 +47,7 @@ export default function OverviewCards() {
         .maybeSingle();
       setPlan(p ?? null);
 
-      // 从“值班人员（本月）”中按当前日期的月与周序取负责人
+      // 从"值班人员（本月）"中按当前日期的月与周序取负责人
       try {
         const y = baseDate.getFullYear();
         const m = baseDate.getMonth() + 1;
@@ -242,5 +242,3 @@ function weekOfMonth(d: Date) {
   const diff = date.getDate() + start.getDay() - 1;
   return Math.floor(diff / 7) + 1;
 }
-
-
