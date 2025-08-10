@@ -99,3 +99,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const supabase = getClient();
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    const month = searchParams.get('month') || '';
+    if (!id) return NextResponse.json({ success: true });
+
+    // 1) 尝试数据库删除
+    try {
+      const { error } = await supabase.from('expenses').delete().eq('id', id);
+      if (error && (error as any).code !== '42P01') throw error;
+    } catch (e) {}
+
+    // 2) cookie fallback 删除
+    try {
+      if (month) {
+        const store = await cookies();
+        const key = `expenses_${month}`;
+        const raw = store.get(key)?.value;
+        const list = raw ? JSON.parse(raw) : [];
+        const next = list.filter((it: any) => String(it.id) !== String(id));
+        store.set(key, JSON.stringify(next), { path: '/', maxAge: 60*60*24*60 });
+      }
+    } catch (e) {}
+
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+  }
+}

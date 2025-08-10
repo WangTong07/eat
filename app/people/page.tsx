@@ -87,10 +87,123 @@ export default function PeoplePage() {
         return { backgroundColor: '#FFF7ED', color: '#7c2d12' } as React.CSSProperties; // 第三周：橙
       case 4:
         return { backgroundColor: '#F3E8FF', color: '#5b21b6' } as React.CSSProperties; // 第四周：紫
+      case 5:
+        return { backgroundColor: '#FDE68A', color: '#854d0e' } as React.CSSProperties; // 第五周：黄
       default:
         return {} as React.CSSProperties;
     }
   };
+
+  // 计算当月实际“工作周”区间（周一到周五），允许跨月，例如 7/29-8/02 或 9/30-10/04
+  const workWeekRanges = useMemo(() => {
+    const y = assignYear; const m = assignMonth; // 1-12
+    const first = new Date(y, m - 1, 1, 12, 0, 0);
+    const last = new Date(y, m, 0, 12, 0, 0);
+    // 找到当月第一个周一（若当月第一天不是周一，则向前取上一个周一，允许跨月）
+    const firstMonday = new Date(first);
+    while (firstMonday.getDay() !== 1) { // 1=Mon
+      firstMonday.setDate(firstMonday.getDate() - 1);
+    }
+    const ranges: Array<{ start: Date; end: Date; label: string }>=[];
+    let start = new Date(firstMonday);
+    // 终止条件：当周的周五已经超过当月最后一天的那一周
+    while (true) {
+      const end = new Date(start);
+      end.setDate(end.getDate() + 4); // 周一+4=周五
+      // 若这一周完全早于本月（周五 < first）则跳过
+      if (end < first) { start.setDate(start.getDate() + 7); continue; }
+      // 构造标签（按起止月份展示）
+      const startM = start.getMonth() + 1;
+      const endM = end.getMonth() + 1;
+      const label = `${startM}/${String(start.getDate()).padStart(2,'0')}-${endM}/${String(end.getDate()).padStart(2,'0')}`;
+      ranges.push({ start: new Date(start), end, label });
+      // 若这一周的周一已超过当月最后一天所在周，则停止
+      if (start > last && end > last) break;
+      start.setDate(start.getDate() + 7); // 下一周
+      // 防止死循环
+      if (ranges.length > 6) break;
+    }
+    return ranges;
+  }, [assignYear, assignMonth]);
+
+  function getRangesFor(year:number, month:number){
+    const first = new Date(year, month - 1, 1, 12, 0, 0);
+    const last = new Date(year, month, 0, 12, 0, 0);
+    const firstMonday = new Date(first);
+    while (firstMonday.getDay() !== 1) { firstMonday.setDate(firstMonday.getDate() - 1); }
+    const arr: Array<{start:Date,end:Date,label:string}> = [];
+    let start = new Date(firstMonday);
+    while (true){
+      const end = new Date(start); end.setDate(end.getDate()+4);
+      if (end < first){ start.setDate(start.getDate()+7); continue; }
+      const sm = start.getMonth()+1; const em = end.getMonth()+1;
+      arr.push({ start:new Date(start), end, label: `${sm}/${String(start.getDate()).padStart(2,'0')}-${em}/${String(end.getDate()).padStart(2,'0')}` });
+      if (start > last && end > last) break;
+      start.setDate(start.getDate()+7); if (arr.length>6) break;
+    }
+    return arr;
+  }
+
+  function getPrevYM(y:number, m:number){
+    return m===1 ? { y: y-1, m: 12 } : { y, m: m-1 };
+  }
+
+  // 基于上月最后一周 → 本月第一周的延续，自动排在前，必要时自动赋值
+  useEffect(()=>{
+    (async()=>{
+      try{
+        // 仅在值班卡片场景使用：按上月最后一周 → 本月第一周做延续与排序
+        const curRanges = getRangesFor(assignYear, assignMonth);
+        if(curRanges.length===0) return;
+        const firstLabel = curRanges[0].label;
+        // 上一月
+        const prev = getPrevYM(assignYear, assignMonth);
+        const prevRanges = getRangesFor(prev.y, prev.m);
+        if(prevRanges.length===0) return;
+        const matchIdxPrev = prevRanges.findIndex(r=> r.label === firstLabel);
+        if(matchIdxPrev<0) return;
+        // 拉取上一月分配
+        const r = await fetch(`/api/duty/staff?year=${prev.y}&month=${prev.m}`);
+        const j = await r.json();
+        const ids: string[] = [];
+        (j.items||[]).forEach((x:any)=>{ if((x.week_in_month||0) === (matchIdxPrev+1)) ids.push(x.member_id); });
+        if(ids.length===0) return;
+        // 计算当前月第一周索引
+        const firstIdx = 1; // 在 getRangesFor 中第一项就是第一周
+        // 当前月占用第一周的人
+        const currentOccupants = Object.keys(staffAssign||{}).filter(uid => (staffAssign as any)[uid] === firstIdx);
+        // 若与上月负责人不同，则以上月负责人为准：解除当前占用并指派给 ids
+        const toUnassign = currentOccupants.filter(uid => !ids.includes(uid));
+        for(const uid of toUnassign){
+          try{ await fetch('/api/duty/staff', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member_id: uid, week_in_month: 0, year: assignYear, month: assignMonth }) }); }catch{}
+        }
+        for(const id of ids){
+          try{ await fetch('/api/duty/staff', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member_id: id, week_in_month: firstIdx, year: assignYear, month: assignMonth }) }); }catch{}
+        }
+        // 本地立即体现
+        const nextMap = { ...staffAssign } as Record<string, number|null>;
+        const nextSet = { ...staffSet } as Record<string, boolean>;
+        toUnassign.forEach(uid=>{ nextMap[uid]=0 as any; });
+        ids.forEach(id=>{ nextMap[id]=firstIdx; nextSet[id]=true; });
+        setStaffAssign(nextMap); setStaffSet(nextSet);
+        writeLocal(assignYear, assignMonth, nextMap, nextSet);
+        await reloadAssignments(assignYear, assignMonth);
+        // 以当前月第一周的实际占用者为优先排序（即便上月没有记录，只要本月已占用，也顶到前面）
+        try {
+          const rCur = await fetch(`/api/duty/staff?year=${assignYear}&month=${assignMonth}`);
+          const jCur = await rCur.json();
+          const currentFirst = (jCur.items||[]).filter((x:any)=> (x.week_in_month||0) === firstIdx).map((x:any)=> x.member_id);
+          if (currentFirst.length>0) setPriorityIds(currentFirst);
+          else setPriorityIds(ids);
+        } catch {
+          setPriorityIds(ids);
+        }
+      }catch{}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignYear, assignMonth, members.length]);
+
+  const [priorityIds, setPriorityIds] = useState<string[]>([]);
 
   const todayStr = useMemo(() => new Date().toISOString().slice(0,10), []);
 
@@ -253,7 +366,17 @@ export default function PeoplePage() {
               {Object.keys(staffAssign).length === 0 && (
                 <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-muted">本月暂无值班人员</td></tr>
               )}
-              {members.filter(m => !!staffSet[m.id]).map(m => (
+              {members
+                .filter(m => !!staffSet[m.id])
+                .sort((a,b)=>{
+                  const ai = priorityIds.indexOf(a.id);
+                  const bi = priorityIds.indexOf(b.id);
+                  if (ai>=0 && bi>=0) return ai-bi;
+                  if (ai>=0) return -1;
+                  if (bi>=0) return 1;
+                  return 0;
+                })
+                .map(m => (
                 <tr key={`assign-${m.id}`}>
                   <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-neutral-900">{m.name}</td>
                   <td className="px-6 py-3 whitespace-nowrap text-sm text-neutral-500">{m.role || '成员'}</td>
@@ -275,7 +398,26 @@ export default function PeoplePage() {
                             await reloadAssignments(assignYear, assignMonth);
                             return;
                           }
+                          // 保存当前月
                           await fetch('/api/duty/staff', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member_id: m.id, week_in_month: v, year: assignYear, month: assignMonth }) });
+                          // 同步到相邻月（跨月同一周自动延续）
+                          try {
+                            const curRanges = getRangesFor(assignYear, assignMonth);
+                            const cur = curRanges[(v-1)];
+                            if (cur){
+                              const sm = cur.start.getMonth()+1; const em = cur.end.getMonth()+1;
+                              if (sm !== em){
+                                // 跨月：把同一周写到另一个月
+                                const otherYear = (em!==assignMonth) ? cur.end.getFullYear() : cur.start.getFullYear();
+                                const otherMonth = (em!==assignMonth) ? em : sm;
+                                const otherRanges = getRangesFor(otherYear, otherMonth);
+                                const idx = otherRanges.findIndex(r=> r.start.getTime()===cur.start.getTime() && r.end.getTime()===cur.end.getTime());
+                                if (idx>=0){
+                                  await fetch('/api/duty/staff', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member_id: m.id, week_in_month: idx+1, year: otherYear, month: otherMonth }) });
+                                }
+                              }
+                            }
+                          } catch {}
                           writeLocal(assignYear, assignMonth, { ...staffAssign, [m.id]: v }, { ...staffSet });
                           await reloadAssignments(assignYear, assignMonth);
                         })();
@@ -284,10 +426,11 @@ export default function PeoplePage() {
                       style={getWeekStyle(staffAssign[m.id])}
                     >
                       <option value="">未分配</option>
-                      <option value="1" style={{ backgroundColor: '#E3F2FD', color: '#1e3a8a' }}>第一周</option>
-                      <option value="2" style={{ backgroundColor: '#E8F5E9', color: '#166534' }}>第二周</option>
-                      <option value="3" style={{ backgroundColor: '#FFF7ED', color: '#7c2d12' }}>第三周</option>
-                      <option value="4" style={{ backgroundColor: '#F3E8FF', color: '#5b21b6' }}>第四周</option>
+                      {workWeekRanges.map((w, idx)=> (
+                        <option key={idx} value={idx+1} style={getWeekStyle(idx+1)}>
+                          {w.label}
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td className="px-6 py-3 whitespace-nowrap text-right text-sm space-x-2">
