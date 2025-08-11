@@ -1,20 +1,20 @@
 {
-  "path": "c:\\Users\\JYQ\\Desktop\\eat",
-  "desc": "Next.js 15 应用（AI伙食官）部署到 CloudStudio，写入 Supabase 环境变量并启动开发服务。",
-  "id": "c26ad9b92cad4e2db9fe77fc1bb5b399",
+  "path": "c:\\Users\\JYQ\\Desktop\\eat\\.next",
+  "desc": "值班人员安排系统 - Next.js构建产物，包含人员管理、财务管理、实时数据同步等功能",
+  "id": "d03bbbe04fa544299ec38fe80e4637f2",
   "data": {
-    "spaceKey": "c26ad9b92cad4e2db9fe77fc1bb5b399",
+    "spaceKey": "d03bbbe04fa544299ec38fe80e4637f2",
     "connections": {
-      "webIDE": "https://c26ad9b92cad4e2db9fe77fc1bb5b399.ap-singapore.cloudstudio.club",
-      "preview": "",
-      "api": "https://c26ad9b92cad4e2db9fe77fc1bb5b399--api.ap-singapore.cloudstudio.club",
-      "pty": "https://c26ad9b92cad4e2db9fe77fc1bb5b399--pty.ap-singapore.cloudstudio.club"
+      "webIDE": "https://d03bbbe04fa544299ec38fe80e4637f2.ap-singapore.cloudstudio.club",
+      "preview": "https://d03bbbe04fa544299ec38fe80e4637f2--{port}.ap-singapore.cloudstudio.club",
+      "api": "https://d03bbbe04fa544299ec38fe80e4637f2--api.ap-singapore.cloudstudio.club",
+      "pty": "https://d03bbbe04fa544299ec38fe80e4637f2--pty.ap-singapore.cloudstudio.club"
     }
   },
   "config": {
-    "api": "https://c26ad9b92cad4e2db9fe77fc1bb5b399--api.ap-singapore.cloudstudio.club",
-    "pty": "https://c26ad9b92cad4e2db9fe77fc1bb5b399--pty.ap-singapore.cloudstudio.club",
+    "api": "https://d03bbbe04fa544299ec38fe80e4637f2--api.ap-singapore.cloudstudio.club",
+    "pty": "https://d03bbbe04fa544299ec38fe80e4637f2--pty.ap-singapore.cloudstudio.club",
     "region": "ap-shanghai",
-    "spaceKey": "c26ad9b92cad4e2db9fe77fc1bb5b399"
+    "spaceKey": "d03bbbe04fa544299ec38fe80e4637f2"
   }
 }
