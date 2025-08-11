@@ -9,6 +9,16 @@ type Category = "肉类" | "蔬果类" | "海鲜类" | "调料类" | "日杂类"
 
 const CATEGORY_ORDER: Category[] = ["肉类", "蔬果类", "海鲜类", "调料类", "日杂类", "饮品类"];
 
+// 分类表情符号映射
+const CATEGORY_EMOJIS: Record<Category, string> = {
+  "肉类": "🥩",
+  "蔬果类": "🥬", 
+  "海鲜类": "🦐",
+  "调料类": "🧂",
+  "日杂类": "🧻",
+  "饮品类": "🥤"
+};
+
 export default function ShoppingListView() {
   const [recs, setRecs] = useState<Rec[]>([]);
   const [list, setList] = useState<Item[]>([]);
@@ -393,7 +403,7 @@ export default function ShoppingListView() {
   };
 
   const byCat = useMemo(()=>{
-    const map = { "肉类":[], "蔬果类":[], "海鲜类":[], "调料类":[], "日杂类":[], "饮品类":[] };
+    const map: Record<Category, Item[]> = { "肉类":[], "蔬果类":[], "海鲜类":[], "调料类":[], "日杂类":[], "饮品类":[] };
     list.forEach(i=> {
       if (map[i.category]) {
         map[i.category].push(i);
@@ -467,7 +477,7 @@ export default function ShoppingListView() {
   };
 
   // 删除物品
-  const removeItem = async (id) => {
+  const removeItem = async (id: string) => {
     setError("");
     
     // 先更新本地状态，使界面立即响应
@@ -545,41 +555,58 @@ export default function ShoppingListView() {
   return (
     <section className="space-y-6">
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-          <span className="block sm:inline">{error}</span>
+        <div className="bg-gradient-to-r from-red-50 to-pink-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-sm flex items-center gap-3">
+          <span className="text-xl">⚠️</span>
+          <span className="block sm:inline font-medium">{error}</span>
         </div>
       )}
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="ui-card rounded-xl p-4">
-          <h3 className="font-bold mb-2">快速添加</h3>
-          <div className="flex gap-2 items-center">
+          <h3 className="font-bold mb-3 flex items-center gap-2 text-gray-800">
+            <span className="text-xl">➕</span>
+            快速添加
+          </h3>
+          <div className="flex gap-3 items-center">
             <input 
-              className="border rounded px-3 py-2" 
-              placeholder="食材名称" 
+              className="border border-gray-300 rounded-lg px-4 py-2 flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" 
+              placeholder="🥬 输入食材名称" 
               value={newName} 
               onChange={e=>setNewName(e.target.value)}
               onKeyPress={e => e.key === 'Enter' && addItem()}
             />
-            <select className="border rounded px-3 py-2" value={newCat} onChange={e=>setNewCat(e.target.value as Category | "智能分类")}>
+            <select className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" value={newCat} onChange={e=>setNewCat(e.target.value as Category | "智能分类")}>
               <option value="智能分类">🤖 智能分类</option>
-              {CATEGORY_ORDER.map(c => <option key={c} value={c}>{c}</option>)}
+              {CATEGORY_ORDER.map(c => <option key={c} value={c}>{CATEGORY_EMOJIS[c]} {c}</option>)}
             </select>
             <button 
-              className="badge badge-primary" 
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" 
               onClick={addItem}
               disabled={isLoading || !newName.trim()}
             >
-              {isLoading ? '添加中...' : '添加'}
+              {isLoading ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  添加中...
+                </>
+              ) : (
+                <>
+                  <span>✨</span>
+                  添加
+                </>
+              )}
             </button>
           </div>
         </div>
         
         <div className="ui-card rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold">从推荐菜生成清单</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold flex items-center gap-2 text-gray-800">
+              <span className="text-xl">🍽️</span>
+              从推荐菜生成清单
+            </h3>
             <button 
-              className="badge badge-secondary" 
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" 
               onClick={() => {
                 if (window.confirm('这将清空当前购物清单并从推荐菜中重新生成，确定继续吗？')) {
                   generateInitialList();
@@ -587,17 +614,36 @@ export default function ShoppingListView() {
               }}
               disabled={isLoading || recs.length === 0}
             >
-              {isLoading ? '生成中...' : '重新生成'}
+              {isLoading ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  生成中...
+                </>
+              ) : (
+                <>
+                  <span>🔄</span>
+                  重新生成
+                </>
+              )}
             </button>
           </div>
-          <div className="mt-2 text-sm text-gray-500">
+          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
             {recs.length > 0 ? (
               <div>
-                <p>本周推荐菜：{recs.map(r => r.dish).join('、')}</p>
-                <p className="mt-1">点击"重新生成"按钮将根据推荐菜自动添加所需食材</p>
+                <p className="flex items-center gap-2 mb-2">
+                  <span className="text-base">📋</span>
+                  <strong>本周推荐菜：</strong>{recs.map(r => r.dish).join('、')}
+                </p>
+                <p className="flex items-center gap-2 text-gray-500">
+                  <span className="text-base">💡</span>
+                  点击"重新生成"按钮将根据推荐菜自动添加所需食材
+                </p>
               </div>
             ) : (
-              <p>暂无推荐菜数据</p>
+              <p className="flex items-center gap-2 text-gray-400">
+                <span className="text-base">😴</span>
+                暂无推荐菜数据
+              </p>
             )}
           </div>
         </div>
@@ -606,36 +652,51 @@ export default function ShoppingListView() {
       {isLoading ? (
         <div className="text-center py-4">加载中...</div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {CATEGORY_ORDER.map(cat => (
             <div key={cat} className="ui-card rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold">{cat}</h3>
-                <span className="text-sm text-muted">{byCat[cat]?.length || 0} 项</span>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold flex items-center gap-2 text-gray-800">
+                  <span className="text-xl">{CATEGORY_EMOJIS[cat]}</span>
+                  {cat}
+                </h3>
+                <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full font-medium">
+                  {byCat[cat]?.length || 0} 项
+                </span>
               </div>
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {(byCat[cat]||[]).map(it => (
-                  <li key={it.id} className="flex items-center justify-between">
-                    <label className="flex items-center gap-2">
+                  <li key={it.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                    <label className="flex items-center gap-3 cursor-pointer flex-1">
                       <input 
                         type="checkbox" 
                         checked={!!it.checked} 
                         onChange={() => updateItemStatus(it.id, !it.checked)}
+                        className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
                       />
-                      <span className={it.checked? 'line-through text-neutral-400':''}>{it.name}</span>
+                      <span className={`${it.checked ? 'line-through text-gray-400' : 'text-gray-700'} font-medium`}>
+                        {it.name}
+                      </span>
                     </label>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-3 h-3 rounded-full ${it.checked ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${it.checked ? 'bg-green-500' : 'bg-orange-400'}`}></div>
                       <button 
-                        className="btn-link" 
+                        className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors duration-200 font-medium"
                         onClick={() => removeItem(it.id)}
+                        title="删除此项"
                       >
+                        <span className="text-base">🗑️</span>
                         删除
                       </button>
                     </div>
                   </li>
                 ))}
-                {(byCat[cat]||[]).length===0 && <li className="text-sm text-muted">暂无</li>}
+                {(byCat[cat]||[]).length===0 && (
+                  <li className="text-center py-4 text-gray-400 italic">
+                    <span className="text-2xl block mb-1">📝</span>
+                    暂无物品
+                  </li>
+                )}
               </ul>
             </div>
           ))}

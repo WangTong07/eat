@@ -1,4 +1,3 @@
-
 "use client";
 import Shell from "../dashboard/Shell";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -138,7 +137,7 @@ export default function FinancePage(){
     }, 0);
   }, [items, currentWeekNumber]);
 
-  // 以客户端数据即时计算“本月每周支出汇总”（避免 Cookie 被浏览器拦截导致为空）
+  // 以客户端数据即时计算"本月每周支出汇总"（避免 Cookie 被浏览器拦截导致为空）
   const weeklyView = useMemo(() => {
     const map: Record<string, number> = {};
     items.forEach((it) => {
@@ -151,7 +150,7 @@ export default function FinancePage(){
       .map((k) => ({ week_number: Number(k), amount_sum: map[k] }));
   }, [items, ym]);
 
-  // 将 ISO 周编号转换为“几月几号-几号”的显示
+  // 将 ISO 周编号转换为"几月几号-几号"的显示
   function isoWeekRangeLabel(weekNumber: number): string {
     const year = Math.floor(weekNumber / 100);
     const week = weekNumber % 100;
@@ -204,12 +203,11 @@ export default function FinancePage(){
       // 直接插入数据库，确保实时同步
       const supabase = getSupabaseClient();
       
-      // 如果有图片，将第一张图片保存到 receipt_url 字段
+      // 如果有图片，将所有图片的 Data URL 保存为 JSON 字符串
       let receiptUrl = null;
       if (files.length > 0) {
-        const firstFile = files[0];
-        const dataUrl = await fileToDataUrl(firstFile);
-        receiptUrl = dataUrl;
+        const allDataUrls = await Promise.all(files.map(fileToDataUrl));
+        receiptUrl = JSON.stringify(allDataUrls);
       }
       
       const { error } = await supabase.from('expenses').insert({
@@ -217,7 +215,7 @@ export default function FinancePage(){
         item_description: desc,  // 使用数据库中的正确字段名
         amount: parseFloat(amount || '0'),
         user_name: handler,      // 使用数据库中的正确字段名
-        receipt_url: receiptUrl  // 保存图片到 receipt_url 字段
+        receipt_url: receiptUrl  // 保存所有图片的 JSON 字符串
       });
       
       if (error) throw error;
@@ -271,7 +269,7 @@ export default function FinancePage(){
           alt="财务装饰图片" 
           className="w-full h-48 object-cover rounded-lg shadow-md"
         />
-        <div className="absolute inset-0 bg-gradient-to-r from-black/50 to-transparent flex items-center">
+        <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-transparent flex items-center">
           <div className="text-white px-6">
             <h2 className="text-3xl font-bold">财务 · 支出与结算</h2>
           </div>
@@ -282,119 +280,219 @@ export default function FinancePage(){
         <PaymentStatsCard ym={ym} refreshKey={payRefreshKey} onBudgetChange={setLinkedBudget} expenseItems={items} />
       </div>
 
-        <div className="ui-card rounded-xl p-5 mt-4">
-        <div className="text-lg font-bold mb-3">本月每周支出汇总</div>
-        <table className="min-w-full divide-y divide-neutral-200">
-          <thead className="bg-neutral-50"><tr><th className="px-4 py-2 text-left">周编号</th><th className="px-4 py-2 text-left">支出金额</th></tr></thead>
-          <tbody className="bg-white divide-y divide-neutral-200">
-            {weeklyView.length===0 && <tr><td className="px-4 py-3 text-sm text-muted" colSpan={2}>本月暂无支出</td></tr>}
-            {weeklyView.map(w=> (
-              <tr key={w.week_number}>
-                <td className="px-4 py-2">{isoWeekRangeLabel(w.week_number)}</td>
-                <td className="px-4 py-2">¥{Number(w.amount_sum||0).toFixed(2)}</td>
+      <div className="bg-gradient-to-br from-emerald-900/30 to-teal-900/30 border border-emerald-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md">
+            <span className="text-white text-lg">📊</span>
+          </div>
+          <div className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+            本月每周支出汇总
+          </div>
+        </div>
+        <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg border border-emerald-700/30 overflow-hidden">
+          <table className="min-w-full">
+            <thead className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
+              <tr>
+                <th className="px-6 py-4 text-left font-semibold">📅 周编号</th>
+                <th className="px-6 py-4 text-right font-semibold">💰 支出金额</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-emerald-700/30">
+              {weeklyView.length===0 && (
+                <tr>
+                  <td className="px-6 py-4 text-center text-gray-400" colSpan={2}>
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-2xl">📝</span>
+                      <span>本月暂无支出</span>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              {weeklyView.map((w, index)=> (
+                <tr key={w.week_number} className={`hover:bg-emerald-800/30 transition-colors duration-150 ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-emerald-800/20'}`}>
+                  <td className="px-6 py-4 font-medium text-gray-200">{isoWeekRangeLabel(w.week_number)}</td>
+                  <td className="px-6 py-4 text-right font-mono font-bold text-emerald-400">
+                    ¥{Number(w.amount_sum||0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div className="ui-card rounded-xl p-5 mt-4">
-        <button className="w-full flex items-center justify-between mb-3" onClick={()=>setShowExpense(s=>!s)}>
-          <div className="text-lg font-bold">支出记录</div>
-          <span className="text-muted text-sm">{showExpense? '收起' : '展开'}</span>
-        </button>
-        {showExpense && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-2 items-start">
-          <input type="date" value={date} onChange={e=>setDate(e.target.value)} className="border rounded px-3 py-2" />
-          <div className="relative md:col-span-1">
-            <input
-              type="text"
-              placeholder="描述"
-              value={desc}
-              onChange={e=>setDesc(e.target.value)}
-              className="border rounded w-full px-3 py-2 pr-10 h-[40px]"
-            />
-            <button
-              type="button"
-              onClick={()=> inputRef.current?.click() }
-              className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full border border-neutral-300 text-neutral-600 grid place-content-center hover:bg-neutral-100"
-              aria-label="添加图片"
-            >
-              +
-            </button>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              ref={inputRef}
-              onChange={(e)=> setFiles(Array.from(e.target.files||[]))}
-              className="hidden"
-            />
-            {previews.length>0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {previews.map((src,idx)=> (
-                  <img key={idx} src={src} alt="预览" className="h-10 w-10 object-cover rounded border cursor-pointer" onClick={()=> setViewerSrc(src)} />
-                ))}
-              </div>
-            )}
+      <div className="bg-gradient-to-br from-orange-900/30 to-amber-900/30 border border-orange-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
+        <button className="w-full flex items-center justify-between mb-4 group" onClick={()=>setShowExpense(s=>!s)}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-amber-500 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-200">
+              <span className="text-white text-lg">📝</span>
+            </div>
+            <div className="text-xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
+              支出记录
+            </div>
           </div>
-          <input placeholder="金额" value={amount} onChange={e=>setAmount(e.target.value)} className="border rounded px-3 py-2" />
-          <input placeholder="经手人" value={handler} onChange={e=>setHandler(e.target.value)} className="border rounded px-3 py-2" />
-          <button className="badge badge-primary w-full h-[40px] flex items-center justify-center" onClick={onAdd}>添加支出</button>
-        </div>
+          <div className="flex items-center gap-2 bg-gray-800/70 backdrop-blur-sm px-4 py-2 rounded-lg border border-orange-700/30 group-hover:border-orange-600/50 transition-all duration-200">
+            <span className="text-sm font-medium text-orange-400">
+              {showExpense? '📤 收起' : '📥 展开'}
+            </span>
+          </div>
+        </button>
+        
+        {showExpense && (
+        <>
+          {/* 添加支出表单 */}
+          <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-orange-700/30 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
+              <input 
+                type="date" 
+                value={date} 
+                onChange={e=>setDate(e.target.value)} 
+                className="border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200" 
+              />
+              <div className="relative md:col-span-1">
+                <input
+                  type="text"
+                  placeholder="📝 描述"
+                  value={desc}
+                  onChange={e=>setDesc(e.target.value)}
+                  className="border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg w-full px-3 py-2 pr-12 h-[44px] focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={()=> inputRef.current?.click() }
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg bg-orange-900/40 border-2 border-orange-700/30 text-orange-400 flex items-center justify-center hover:bg-orange-800/40 hover:border-orange-600/50 transition-all duration-200 shadow-sm"
+                  aria-label="添加图片"
+                >
+                  📷
+                </button>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  ref={inputRef}
+                  onChange={(e)=> setFiles(Array.from(e.target.files||[]))}
+                  className="hidden"
+                />
+                {previews.length>0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {previews.map((src,idx)=> (
+                      <img 
+                        key={idx} 
+                        src={src} 
+                        alt="预览" 
+                        className="h-12 w-12 object-cover rounded-lg border-2 border-orange-700/30 cursor-pointer hover:border-orange-600/50 transition-colors duration-200 shadow-sm hover:shadow-md" 
+                        onClick={()=> setViewerSrc(src)} 
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              <input 
+                placeholder="💰 金额" 
+                value={amount} 
+                onChange={e=>setAmount(e.target.value)} 
+                className="border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400" 
+              />
+              <input 
+                placeholder="👤 经手人" 
+                value={handler} 
+                onChange={e=>setHandler(e.target.value)} 
+                className="border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400" 
+              />
+              <button 
+                className="bg-gradient-to-r from-orange-400 to-amber-500 hover:from-orange-500 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-lg h-[44px] flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-95 transition-all duration-200" 
+                onClick={onAdd}
+              >
+                ➕ 添加支出
+              </button>
+            </div>
+          </div>
+
+          {/* 支出记录表格 - 深色主题 */}
+          <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg border border-orange-700/30 overflow-hidden">
+            <table className="min-w-full">
+              <thead className="bg-gradient-to-r from-orange-300 to-amber-400 text-white">
+                <tr>
+                  <th className="px-4 py-4 text-left font-semibold text-sm">📅 日期</th>
+                  <th className="px-4 py-4 text-left font-semibold text-sm">📝 描述</th>
+                  <th className="px-4 py-4 text-right font-semibold text-sm">💰 金额</th>
+                  <th className="px-4 py-4 text-left font-semibold text-sm">👤 经手人</th>
+                  <th className="px-4 py-4 text-center font-semibold text-sm w-24">⚙️ 操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-orange-700/30">
+                {items.length===0 && (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-gray-400" colSpan={5}>
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-2xl">📋</span>
+                        <span className="text-sm">暂无支出记录</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {items.map((it, index)=> (
+                  <tr key={it.id} className={`hover:bg-orange-800/30 transition-colors duration-150 ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-orange-800/20'}`}>
+                    <td className="px-4 py-3 font-medium text-gray-200 text-sm">{it.date}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-200 text-sm">{(it as any).item_description || it.description}</div>
+                      {(it as any).receipt_url && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {(() => {
+                            try {
+                              // 尝试解析为 JSON 数组（多张图片）
+                              const urls = JSON.parse((it as any).receipt_url);
+                              if (Array.isArray(urls)) {
+                                return urls.map((url, idx) => (
+                                  <img
+                                    key={idx}
+                                    src={url}
+                                    alt={`收据 ${idx + 1}`}
+                                    className="h-8 w-8 object-cover rounded border border-orange-700/30 cursor-pointer hover:border-orange-600/50 transition-colors duration-200 shadow-sm hover:shadow-md"
+                                    onClick={() => setViewerSrc(url)}
+                                  />
+                                ));
+                              }
+                            } catch {
+                              // 如果解析失败，说明是单张图片的字符串格式
+                            }
+                            // 单张图片显示
+                            return (
+                              <img
+                                src={(it as any).receipt_url}
+                                alt="收据"
+                                className="h-8 w-8 object-cover rounded border border-orange-700/30 cursor-pointer hover:border-orange-600/50 transition-colors duration-200 shadow-sm hover:shadow-md"
+                                onClick={() => setViewerSrc((it as any).receipt_url)}
+                              />
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-orange-400 text-sm">
+                      ¥{Number(it.amount||0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-300 text-sm">{(it as any).user_name || it.handler || '-'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/50 text-red-400 hover:bg-red-800/40 hover:border-red-600/50 active:scale-95 transition-all duration-200 font-medium shadow-sm hover:shadow-md text-xs"
+                        onClick={()=> onDelete(it)}
+                      >
+                        🗑️ 删除
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
         )}
       </div>
-
-      {showExpense && (
-      <div className="ui-card rounded-xl p-5 mt-4">
-        <table className="min-w-full divide-y divide-neutral-200">
-          <thead className="bg-neutral-50">
-            <tr>
-              <th className="px-4 py-2 text-left">日期</th>
-              <th className="px-4 py-2 text-left">描述</th>
-              <th className="px-4 py-2 text-left">金额</th>
-              <th className="px-4 py-2 text-left">经手人</th>
-              <th className="px-4 py-2 text-right w-24">操作</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-neutral-200">
-            {items.length===0 && <tr><td className="px-4 py-3 text-sm text-muted" colSpan={4}>暂无支出记录</td></tr>}
-            {items.map(it=> (
-              <tr key={it.id}>
-                <td className="px-4 py-2">{it.date}</td>
-                <td className="px-4 py-2">
-                  <div>{(it as any).item_description || it.description}</div>
-                  {(it as any).receipt_url && (
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      <img
-                        src={(it as any).receipt_url}
-                        alt="收据"
-                        className="h-10 w-10 object-cover rounded border cursor-pointer"
-                        onClick={()=> setViewerSrc((it as any).receipt_url)}
-                      />
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-2">¥{Number(it.amount||0).toFixed(2)}</td>
-                <td className="px-4 py-2">{(it as any).user_name || it.handler || ''}</td>
-                <td className="px-4 py-2 text-right">
-                  <button
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded border border-red-500 text-red-600 hover:bg-red-50 active:scale-95 transition select-none"
-                    onClick={()=> onDelete(it)}
-                  >
-                    删除
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      )}
       <PayStatsCard onChange={()=> setPayRefreshKey(k=>k+1)} />
       {viewerSrc && (
         <div
-          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center"
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center"
           onClick={()=> setViewerSrc(null)}
         >
           <img src={viewerSrc} className="max-w-[90vw] max-h-[90vh] object-contain shadow-2xl" />
@@ -404,65 +502,7 @@ export default function FinancePage(){
   );
 }
 
-// 简易图片预览层挂在页面底部
-export function ImageViewer({ src, onClose }: { src: string; onClose: () => void }){
-  if(!src) return null as any;
-  return (
-    <div
-      className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center"
-      onClick={onClose}
-    >
-      <img src={src} className="max-w-[90vw] max-h-[90vh] object-contain shadow-2xl" />
-    </div>
-  );
-}
-
-// 右侧卡片：本月预测/洞察
-function MonthInsights({ ym, items, weekStart, weekEnd }: { ym: string; items: Expense[]; weekStart: string; weekEnd: string }){
-  const monthTotal = useMemo(() => items
-    .filter(it => typeof it.date === 'string' && it.date.startsWith(ym + '-'))
-    .reduce((s, it) => s + Number(it.amount || 0), 0), [items, ym]);
-
-  // 平均每日
-  const daysInMonth = useMemo(() => {
-    const [y, m] = ym.split('-').map(v => parseInt(v));
-    return new Date(y, m, 0).getDate();
-  }, [ym]);
-  const dailyAvg = monthTotal / Math.max(daysInMonth, 1);
-
-  // 最高支出日
-  const topDay = useMemo(() => {
-    const map: Record<string, number> = {};
-    items.forEach(it => {
-      if (!it.date || !it.date.startsWith(ym + '-')) return;
-      map[it.date] = (map[it.date] || 0) + Number(it.amount || 0);
-    });
-    let maxKey = '';
-    let maxVal = 0;
-    Object.keys(map).forEach(k => { if (map[k] > maxVal) { maxVal = map[k]; maxKey = k; } });
-    return { date: maxKey, amount: maxVal };
-  }, [items, ym]);
-
-  // 根据成员缴费合成“本周预算”：统计当前月份所有成员的缴费金额之和
-  const weeklyBudget = useMemo(() => {
-    // 读取 API cookies 兜底或实时接口（简单方案：直接调用接口同步读取一次）
-    // 这里不阻塞渲染，初始显示 0，由下方 Effect 尝试异步更新
-    return 0;
-  }, [ym]);
-
-  return (
-    <div className="space-y-1 text-sm">
-      <WeeklyBudget ym={ym} weekStart={weekStart} weekEnd={weekEnd} />
-      <div className="flex justify-between"><span className="text-muted">本月累计</span><span className="font-semibold">¥{monthTotal.toFixed(2)}</span></div>
-      <div className="flex justify-between"><span className="text-muted">日均支出</span><span>¥{dailyAvg.toFixed(2)}</span></div>
-      {topDay.date && (
-        <div className="flex justify-between"><span className="text-muted">最高支出日</span><span>{topDay.date} · ¥{topDay.amount.toFixed(2)}</span></div>
-      )}
-    </div>
-  );
-}
-
-// 缴费统计卡片组件
+// 缴费统计卡片组件 - 深色主题设计
 function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym: string; refreshKey: number; onBudgetChange?: (budget: number) => void; expenseItems: Expense[] }){
   const [totalMembers, setTotalMembers] = useState(0);
   const [paidMembers, setPaidMembers] = useState(0);
@@ -502,11 +542,11 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
         });
         
         const total = members.length;
-        const paid = memberDetails.filter(m => m.paid).length;
+        const paid = memberDetails.filter((m: any) => m.paid).length;
         const unpaid = total - paid;
         
         // 计算总预算（所有已缴费金额之和）
-        const budget = memberDetails.reduce((sum, member) => {
+        const budget = memberDetails.reduce((sum: number, member: any) => {
           return sum + (member.paid && member.amount ? Number(member.amount) : 0);
         }, 0);
         
@@ -516,6 +556,7 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
         setDetails(memberDetails);
         setTotalBudget(budget);
         
+        // 通知父组件预算变化
         // 通知父组件预算变化
         onBudgetChange && onBudgetChange(budget);
       }catch{
@@ -535,146 +576,147 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
     .reduce((s,e)=> s + Number(e.amount||0), 0);
 
   // 计算结余
-  const remainingBudget = Math.max(totalBudget - monthlySpend, 0);
+  const remainingBudget = totalBudget - monthlySpend;
   
   // 计算使用百分比
   const usagePercentage = totalBudget > 0 ? Math.min((monthlySpend / totalBudget) * 100, 100) : 0;
 
   return (
-    <div className="ui-card rounded-xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-lg font-bold text-neutral-800">本月预算概览</div>
-        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-          <span className="text-blue-600 text-lg">💰</span>
+    <div className="bg-gradient-to-br from-blue-900/30 via-indigo-900/30 to-purple-900/30 border border-blue-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          💰 本月预算概览
+        </div>
+        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
+          <span className="text-white text-lg">💎</span>
         </div>
       </div>
       
-      {/* 预算/支出/结余显示 */}
-      <div className="text-3xl font-bold text-neutral-900 mb-1">
-        ¥{monthlySpend.toFixed(0)} / ¥{totalBudget.toFixed(0)}
-      </div>
-      <div className="w-full bg-neutral-200 rounded-full h-2 mb-3">
-        <div 
-          className={`h-2 rounded-full transition-all duration-300 ${
-            usagePercentage >= 90 ? 'bg-red-500' : 
-            usagePercentage >= 80 ? 'bg-orange-500' : 
-            'bg-green-500'
-          }`}
-          style={{ width: `${usagePercentage}%` }}
-        ></div>
-      </div>
-      <div className="text-sm text-neutral-600 mb-4">
-        结余: ¥{remainingBudget.toFixed(2)}
+      {/* 预算/支出显示 - 深色主题设计 */}
+      <div className="space-y-2 mb-4">
+        <div className="flex items-baseline gap-2">
+          <div className="text-4xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            ¥{monthlySpend.toLocaleString('zh-CN', { minimumFractionDigits: 0 })}
+          </div>
+          <div className="text-lg text-gray-400 font-medium">
+            / ¥{totalBudget.toLocaleString('zh-CN', { minimumFractionDigits: 0 })}
+          </div>
+        </div>
+        
+        {/* 现代化进度条 - 深色主题 */}
+        <div className="w-full bg-gray-700 rounded-full h-3 shadow-inner">
+          <div 
+            className={`h-3 rounded-full transition-all duration-500 ease-out shadow-sm ${
+              usagePercentage >= 100 ? 'bg-gradient-to-r from-red-500 to-red-600' : 
+              usagePercentage >= 90 ? 'bg-gradient-to-r from-orange-500 to-red-500' : 
+              usagePercentage >= 80 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' : 
+              'bg-gradient-to-r from-green-500 to-emerald-500'
+            }`}
+            style={{ width: `${Math.min(usagePercentage, 100)}%` }}
+          ></div>
+        </div>
+        
+        {/* 结余显示 - 深色主题 */}
+        <div className={`text-sm font-semibold ${remainingBudget >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          {remainingBudget >= 0 ? '✅ 结余' : '⚠️ 超支'}: ¥{Math.abs(remainingBudget).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+        </div>
       </div>
 
-      {/* 缴费统计 */}
-      <div className="grid grid-cols-3 gap-4 mb-3 pt-3 border-t border-neutral-200">
-        <div className="text-center">
-          <div className="text-muted text-xs">总人数</div>
-          <div className="text-lg font-bold">{totalMembers}</div>
+      {/* 缴费统计 - 深色主题卡片设计 */}
+      <div className="grid grid-cols-3 gap-3 mb-4 pt-4 border-t border-indigo-700/30">
+        <div className="bg-gray-800/60 backdrop-blur-sm rounded-lg p-3 text-center shadow-sm hover:shadow-md transition-all duration-200 border border-gray-700/30">
+          <div className="text-xs text-gray-400 mb-1 flex items-center justify-center gap-1">
+            <span>👥</span> 总人数
+          </div>
+          <div className="text-2xl font-bold text-gray-200">{totalMembers}</div>
         </div>
-        <div className="text-center">
-          <div className="text-muted text-xs">已交费</div>
-          <div className="text-lg font-bold text-green-600">{paidMembers}</div>
+        <div className="bg-gray-800/60 backdrop-blur-sm rounded-lg p-3 text-center shadow-sm hover:shadow-md transition-all duration-200 border border-gray-700/30">
+          <div className="text-xs text-gray-400 mb-1 flex items-center justify-center gap-1">
+            <span>✅</span> 已交费
+          </div>
+          <div className="text-2xl font-bold text-green-400">{paidMembers}</div>
         </div>
-        <div className="text-center">
-          <div className="text-muted text-xs">未交费</div>
-          <div className="text-lg font-bold text-red-600">{unpaidMembers}</div>
+        <div className="bg-gray-800/60 backdrop-blur-sm rounded-lg p-3 text-center shadow-sm hover:shadow-md transition-all duration-200 border border-gray-700/30">
+          <div className="text-xs text-gray-400 mb-1 flex items-center justify-center gap-1">
+            <span>❌</span> 未交费
+          </div>
+          <div className="text-2xl font-bold text-red-400">{unpaidMembers}</div>
         </div>
       </div>
       
       <div>
-        <button className="badge badge-muted" onClick={()=> setOpen(o=>!o)}>
-          {open? '收起明细' : '缴费明细'}
+        <button 
+          className="bg-gray-800/70 hover:bg-gray-700/70 backdrop-blur-sm border border-indigo-700/30 text-indigo-400 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
+          onClick={()=> setOpen(o=>!o)}
+        >
+          {open? '📤 收起明细' : '📋 缴费明细'}
         </button>
       </div>
       {open && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="min-w-full divide-y divide-neutral-200 text-sm">
-            <thead className="bg-neutral-50">
-              <tr>
-                <th className="px-3 py-2 text-left">姓名</th>
-                <th className="px-3 py-2 text-left">状态</th>
-                <th className="px-3 py-2 text-right">金额</th>
-              </tr>
-            </thead>
-            <tbody>
-              {details.length===0 && (
-                <tr>
-                  <td colSpan={3} className="px-3 py-3 text-muted text-center">暂无成员</td>
+        <div className="mt-4 bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-indigo-700/30">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b border-indigo-700/30">
+                  <th className="px-3 py-3 text-left font-semibold text-gray-300">姓名</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-300">状态</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-300">金额</th>
                 </tr>
-              )}
-              {details.map((d,i)=> (
-                <tr key={i} className="border-b last:border-b-0">
-                  <td className="px-3 py-2">{d.name}</td>
-                  <td className="px-3 py-2">
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      d.paid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {d.paid ? '已交' : '未交'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {d.amount ? `¥${Number(d.amount).toFixed(0)}` : '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {details.length===0 && (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-4 text-center text-gray-400">暂无成员</td>
+                  </tr>
+                )}
+                {details.map((d,i)=> (
+                  <tr key={i} className="border-b border-gray-700/30 last:border-b-0 hover:bg-gray-700/30 transition-colors duration-150">
+                    <td className="px-3 py-3 font-medium text-gray-200">{d.name}</td>
+                    <td className="px-3 py-3">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        d.paid 
+                          ? 'bg-green-900/40 text-green-400 border border-green-700/50' 
+                          : 'bg-red-900/40 text-red-400 border border-red-700/50'
+                      }`}>
+                        {d.paid ? '✅ 已交' : '❌ 未交'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono font-semibold text-gray-200">
+                      {d.amount ? `¥${Number(d.amount).toLocaleString('zh-CN', { minimumFractionDigits: 0 })}` : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-// 本月预算使用卡片组件
-function MonthlyBudgetCard({ ym, expenseItems, refreshKey, linkedBudget }: { ym: string; expenseItems: Expense[]; refreshKey: number; linkedBudget?: number }){
-  // 使用联动的预算数据，实时更新
-  const monthlyBudget = linkedBudget || 0;
-
-  // 计算本月支出总额，实时更新
-  const monthlySpend = expenseItems
-    .filter(e=> typeof e.date==='string' && e.date.startsWith(ym+'-'))
-    .reduce((s,e)=> s + Number(e.amount||0), 0);
-
-  const usagePercentage = monthlyBudget > 0 ? Math.min((monthlySpend / monthlyBudget) * 100, 100) : 0;
-
-  return (
-    <div className="ui-card rounded-xl p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-lg font-bold text-neutral-800">本月预算</div>
-        <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-          <span className="text-green-600 text-lg">💰</span>
-        </div>
-      </div>
-      <div className="text-3xl font-bold text-neutral-900 mb-1">
-        ¥{monthlySpend.toFixed(0)} / ¥{monthlyBudget.toFixed(0)}
-      </div>
-      <div className="w-full bg-neutral-200 rounded-full h-2 mb-3">
-        <div 
-          className={`h-2 rounded-full transition-all duration-300 ${
-            usagePercentage >= 90 ? 'bg-red-500' : 
-            usagePercentage >= 80 ? 'bg-orange-500' : 
-            'bg-green-500'
-          }`}
-          style={{ width: `${usagePercentage}%` }}
-        ></div>
-      </div>
-    </div>
-  );
-}
-
-// 成员缴费统计组件
+// 成员缴费统计组件 - 深色主题设计
 function PayStatsCard({ onChange }: { onChange?: ()=>void }){
   const [open, setOpen] = useState<boolean>(false);
   return (
-    <div className="ui-card rounded-xl p-5 mt-4">
-      <button className="w-full flex items-center justify-between" onClick={()=>setOpen(o=>!o)}>
-        <div className="text-lg font-bold">成员缴费统计（本月）</div>
-        <span className="text-muted text-sm">{open? '收起' : '展开'}</span>
+    <div className="bg-gradient-to-br from-cyan-900/30 to-blue-900/30 border border-cyan-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
+      <button className="w-full flex items-center justify-between mb-4 group" onClick={()=>setOpen(o=>!o)}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-200">
+            <span className="text-white text-lg">👥</span>
+          </div>
+          <div className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+            成员缴费统计（本月）
+          </div>
+        </div>
+        <div className="flex items-center gap-2 bg-gray-800/70 backdrop-blur-sm px-4 py-2 rounded-lg border border-cyan-700/30 group-hover:border-cyan-600/50 transition-all duration-200">
+          <span className="text-sm font-medium text-cyan-400">
+            {open? '📤 收起' : '📥 展开'}
+          </span>
+        </div>
       </button>
       {open && (
-        <div className="mt-3">
+        <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-cyan-700/30">
           <PayStats onChange={onChange} />
         </div>
       )}
@@ -682,53 +724,7 @@ function PayStatsCard({ onChange }: { onChange?: ()=>void }){
   );
 }
 
-// 读取成员缴费金额，展示“本周预算”
-function WeeklyBudget({ ym, weekStart, weekEnd }: { ym: string; weekStart: string; weekEnd: string }){
-  const [sum, setSum] = useState<number>(0);
-  useEffect(()=>{
-    (async()=>{
-      try{
-        const [y, m] = ym.split('-').map(v=>parseInt(v));
-        const r = await fetch(`/api/members/pay?year=${y}&month=${m}`);
-        const j = await r.json();
-        // 按天分摊（固定月费 920）：每日金额 = 920 / 当月工作日数，求本周覆盖到的工作日的总额
-        const toDate = (s:string)=>{ const [yy,mm,dd]=s.split('-').map(n=>parseInt(n)); return new Date(yy,mm-1,dd,12,0,0); };
-        const isWorkday = (d:Date)=>{ const k=d.getDay(); return k>=1 && k<=5; };
-        const countWorkdays = (a:Date,b:Date)=>{ const d=new Date(a); d.setHours(12,0,0,0); const end=new Date(b); end.setHours(12,0,0,0); let c=0; while(d<=end){ if(isWorkday(d)) c++; d.setDate(d.getDate()+1);} return c; };
-        const monthWorkdays = (yy:number, mm:number)=>{ const first=new Date(yy,mm-1,1,12,0,0); const last=new Date(yy,mm,0,12,0,0); return countWorkdays(first,last); };
-        const clamp = (x:Date, a:Date, b:Date)=> new Date(Math.min(Math.max(x.getTime(), a.getTime()), b.getTime()));
-
-        const weekA = toDate(weekStart); const weekB = toDate(weekEnd);
-
-        const total = (j.items||[]).reduce((s:any,it:any)=>{
-          if(!it.paid) return s;
-          let covA: Date | null = null; let covB: Date | null = null;
-          if(it.coverage==='month') {
-            // 当月整月覆盖
-            covA = new Date(y, m-1, 1, 12,0,0);
-            covB = new Date(y, m, 0, 12,0,0);
-          }
-          else if(it.coverage==='range') { if(!it.from_date || !it.to_date) return s; covA = toDate(String(it.from_date)); covB = toDate(String(it.to_date)); }
-          else { return s; }
-          if(!covA || !covB || covA>covB) return s;
-          const ia = clamp(weekA, covA, covB);
-          const ib = clamp(weekB, covA, covB);
-          if(ia>ib) return s;
-          // 遍历本周工作日逐天计费：日额 = 920 / 当天所在月份的工作日数
-          let add = 0; const d=new Date(ia); d.setHours(12,0,0,0); const end=new Date(ib); end.setHours(12,0,0,0);
-          while(d<=end){ if(isWorkday(d)) { const md = monthWorkdays(d.getFullYear(), d.getMonth()+1); if(md>0) add += MONTH_PRICE / md; } d.setDate(d.getDate()+1); }
-          return s + add;
-        }, 0);
-        setSum(total);
-      }catch{ setSum(0); }
-    })();
-  },[ym, weekStart, weekEnd]);
-  return (
-    <div className="flex justify-between"><span className="text-muted">预算合计</span><span className="font-semibold">¥{Number(sum||0).toFixed(2)}</span></div>
-  );
-}
-
-// 成员缴费统计明细表
+// 成员缴费统计明细表 - 深色主题
 function PayStats({ onChange }: { onChange?: ()=>void }){
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [month, setMonth] = useState<number>(new Date().getMonth()+1);
@@ -790,7 +786,7 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
       else { list.push({ member_id: memberId, paid: false, amount: null, coverage: null, from_date: null, to_date: null, ...patch } as any); }
       return list;
     });
-    // 仅发送“被修改”的字段，避免把未修改的旧值写回覆盖
+    // 仅发送"被修改"的字段，避免把未修改的旧值写回覆盖
     const body: any = { member_id: memberId, year, month };
     Object.keys(patch).forEach((k)=>{ body[k] = (patch as any)[k]; });
     if (savingIds[memberId]) return;
@@ -828,103 +824,192 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
   }
 
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-3 text-sm">
-        <label>年份</label>
-        <input type="number" className="border rounded px-2 py-1 w-24" value={year} onChange={e=>setYear(parseInt(e.target.value||`${new Date().getFullYear()}`))} />
-        <label>月份</label>
-        <input type="number" className="border rounded px-2 py-1 w-20" value={month} onChange={e=>setMonth(parseInt(e.target.value||`${new Date().getMonth()+1}`))} />
-        <button className="badge badge-muted" onClick={reload}>刷新</button>
+    <div className="space-y-4">
+      {/* 控制面板 - 深色主题设计 */}
+      <div className="bg-gradient-to-r from-cyan-900/40 to-blue-900/40 rounded-lg p-4 border border-cyan-700/30">
+        <div className="flex items-center gap-4 mb-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-cyan-400">📅 年份</label>
+            <input 
+              type="number" 
+              className="border-2 border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 w-24 focus:border-cyan-600/50 focus:ring-2 focus:ring-cyan-900/30 transition-all duration-200" 
+              value={year} 
+              onChange={e=>setYear(parseInt(e.target.value||`${new Date().getFullYear()}`))} 
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-cyan-400">📅 月份</label>
+            <input 
+              type="number" 
+              className="border-2 border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 w-20 focus:border-cyan-600/50 focus:ring-2 focus:ring-cyan-900/30 transition-all duration-200" 
+              value={month} 
+              onChange={e=>setMonth(parseInt(e.target.value||`${new Date().getMonth()+1}`))} 
+            />
+          </div>
+          <button 
+            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200" 
+            onClick={reload}
+          >
+            🔄 刷新
+          </button>
+        </div>
+        
+        {/* 统计信息 - 深色主题 */}
+        <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-cyan-700/30">
+            <span className="text-cyan-400">👥</span>
+            <span className="text-gray-300">总人数：</span>
+            <span className="font-bold text-gray-200">{totalCount}</span>
+          </div>
+          <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-green-700/30">
+            <span className="text-green-400">✅</span>
+            <span className="text-gray-300">已交：</span>
+            <span className="font-bold text-green-400">{paidCount}</span>
+          </div>
+          <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-red-700/30">
+            <span className="text-red-400">❌</span>
+            <span className="text-gray-300">未交：</span>
+            <span className="font-bold text-red-400">{unpaidCount}</span>
+          </div>
+        </div>
       </div>
-      <div className="mb-2 text-sm flex items-center gap-4">
-        <span>总人数：<b>{totalCount}</b></span>
-        <span>已交：<b className="text-green-600">{paidCount}</b></span>
-        <span>未交：<b className="text-red-600">{unpaidCount}</b></span>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-neutral-200 text-sm">
-          <thead className="bg-neutral-50">
-            <tr>
-              <th className="px-4 py-2 text-left">姓名</th>
-              <th className="px-4 py-2 text-left">是否已交</th>
-              <th className="px-4 py-2 text-left">金额</th>
-              <th className="px-4 py-2 text-left">覆盖范围</th>
-              <th className="px-4 py-2 text-right w-28">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map(m=>{
-              const rec = map[m.id] || {};
-              const label = rec.coverage==='range' && rec.from_date && rec.to_date ? `${rec.from_date}~${rec.to_date}` : (rec.paid? '整月' : '-');
-              return (
-                <tr key={`pay-${m.id}`} className="border-b last:border-b-0">
-                  <td className="px-4 py-2">{m.name}</td>
-                  <td className="px-4 py-2">
-                    <div className="inline-flex rounded-full border overflow-hidden select-none">
-                      <button
-                        className={`px-3 py-1 text-sm ${rec.paid ? 'bg-green-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
-                        onClick={()=> setPaid(m.id, true)}
-                      >已交</button>
-                      <button
-                        className={`px-3 py-1 text-sm ${!rec.paid ? 'bg-red-500 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
-                        onClick={()=> setPaid(m.id, false)}
-                      >未交</button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      className="border rounded px-2 py-1 w-28"
-                      value={localAmounts[m.id] ?? (rec.amount ?? '')}
-                      placeholder="金额"
-                      onChange={(e)=>{
-                        const raw = e.target.value;
-                        setLocalAmounts(prev=>({ ...prev, [m.id]: raw }));
-                      }}
-                      onBlur={(e)=>{
-                        const raw = e.currentTarget.value;
-                        const v = raw === '' ? null : Number(raw);
-                        setLocal(m.id, { amount: Number.isNaN(v as any) ? null : v });
-                        upsert(m.id, { amount: Number.isNaN(v as any) ? null : v });
-                        setLocalAmounts(prev=>{ const n={...prev}; delete n[m.id]; return n; });
-                      }}
-                    />
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <select
-                        className="border rounded px-2 py-1"
-                        value={rec.coverage || ''}
+
+      {/* 成员缴费表格 - 深色主题设计 */}
+      <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg border border-cyan-700/30 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold text-sm">👤 姓名</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm">💳 是否已交</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm">💰 金额</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm">📅 覆盖范围</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm w-20">⚙️ 操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-cyan-700/30">
+              {members.map((m, index)=>{
+                const rec = map[m.id] || {};
+                return (
+                  <tr key={`pay-${m.id}`} className={`hover:bg-cyan-800/30 transition-colors duration-150 ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-cyan-800/20'}`}>
+                    <td className="px-4 py-3 font-medium text-gray-200">{m.name}</td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="inline-flex rounded-md border border-gray-600/50 overflow-hidden shadow-sm">
+                        <button
+                          className={`px-3 py-1 text-xs font-medium transition-all duration-200 ${
+                            rec.paid 
+                              ? 'bg-green-600 text-white' 
+                              : 'bg-gray-700 text-gray-300 hover:bg-green-700/30 hover:text-green-400'
+                          }`}
+                          onClick={()=> setPaid(m.id, true)}
+                        >
+                          ✓ 已交
+                        </button>
+                        <button
+                          className={`px-3 py-1 text-xs font-medium transition-all duration-200 ${
+                            !rec.paid 
+                              ? 'bg-red-600 text-white' 
+                              : 'bg-gray-700 text-gray-300 hover:bg-red-700/30 hover:text-red-400'
+                          }`}
+                          onClick={()=> setPaid(m.id, false)}
+                        >
+                          ✗ 未交
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 w-24 text-center text-sm font-mono focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200"
+                        value={localAmounts[m.id] ?? (rec.amount ?? '')}
+                        placeholder="金额"
                         onChange={(e)=>{
-                          const v = e.target.value as any;
-                          // 用户切换时立刻更新本地，避免选择器回跳
-                          setLocal(m.id, v? { coverage: v } : { coverage: null, from_date: null, to_date: null });
-                          if(v==='month') { upsert(m.id, { coverage:'month', from_date: null, to_date: null, amount: MONTH_PRICE }); setLocal(m.id, { amount: MONTH_PRICE }); }
-                          else if(v==='range') upsert(m.id, { coverage:'range' });
-                          else upsert(m.id, { coverage: null, from_date: null, to_date: null });
+                          const raw = e.target.value;
+                          setLocalAmounts(prev=>({ ...prev, [m.id]: raw }));
+                        }}
+                        onBlur={(e)=>{
+                          const raw = e.currentTarget.value;
+                          const v = raw === '' ? null : Number(raw);
+                          setLocal(m.id, { amount: Number.isNaN(v as any) ? null : v });
+                          upsert(m.id, { amount: Number.isNaN(v as any) ? null : v });
+                          setLocalAmounts(prev=>{ const n={...prev}; delete n[m.id]; return n; });
+                        }}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2 justify-center">
+                        <select
+                          className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 text-sm focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200"
+                          value={rec.coverage || ''}
+                          onChange={(e)=>{
+                            const v = e.target.value as any;
+                            setLocal(m.id, v? { coverage: v } : { coverage: null, from_date: null, to_date: null });
+                            if(v==='month') { upsert(m.id, { coverage:'month', from_date: null, to_date: null, amount: MONTH_PRICE }); setLocal(m.id, { amount: MONTH_PRICE }); }
+                            else if(v==='range') upsert(m.id, { coverage:'range' });
+                            else upsert(m.id, { coverage: null, from_date: null, to_date: null });
+                          }}
+                        >
+                          <option value="">选择</option>
+                          <option value="month">整月</option>
+                          <option value="range">区间</option>
+                        </select>
+                        <div className="flex items-center gap-1" style={{ minWidth: 240, visibility: rec.coverage==='range' ? 'visible' as any : 'hidden' as any }}>
+                          <input 
+                            type="date" 
+                            className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 text-sm focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200" 
+                            value={rec.from_date || ''} 
+                            onChange={(e)=>{ 
+                              const v=e.target.value||null; 
+                              setLocal(m.id, { from_date: v }); 
+                              upsert(m.id, { from_date: v }); 
+                              const sug=suggestAmountByRange(v, rec.to_date||null); 
+                              if(sug!==null){ setLocal(m.id, { amount: sug }); upsert(m.id, { amount: sug }); } 
+                            }} 
+                          />
+                          <span className="text-cyan-400 text-sm">~</span>
+                          <input 
+                            type="date" 
+                            className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 text-sm focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200" 
+                            value={rec.to_date || ''} 
+                            onChange={(e)=>{ 
+                              const v=e.target.value||null; 
+                              setLocal(m.id, { to_date: v }); 
+                              upsert(m.id, { to_date: v }); 
+                              const sug=suggestAmountByRange(rec.from_date||null, v); 
+                              if(sug!==null){ setLocal(m.id, { amount: sug }); upsert(m.id, { amount: sug }); } 
+                            }} 
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button 
+                        className="bg-red-900/40 hover:bg-red-800/40 border border-red-700/50 text-red-400 px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 hover:shadow-sm" 
+                        onClick={async()=>{ 
+                          await fetch(`/api/members/pay?member_id=${m.id}&year=${year}&month=${month}`, { method:'DELETE' }); 
+                          await reload(); 
                         }}
                       >
-                        <option value="">-</option>
-                        <option value="month">整月</option>
-                        <option value="range">区间</option>
-                      </select>
-                      <div className="flex items-center gap-2" style={{ minWidth: 260, visibility: rec.coverage==='range' ? 'visible' as any : 'hidden' as any }}>
-                        <input type="date" className="border rounded px-2 py-1" value={rec.from_date || ''} onChange={(e)=>{ const v=e.target.value||null; setLocal(m.id, { from_date: v }); upsert(m.id, { from_date: v }); const sug=suggestAmountByRange(v, rec.to_date||null); if(sug!==null){ setLocal(m.id, { amount: sug }); upsert(m.id, { amount: sug }); } }} />
-                        <span className="text-muted">~</span>
-                        <input type="date" className="border rounded px-2 py-1" value={rec.to_date || ''} onChange={(e)=>{ const v=e.target.value||null; setLocal(m.id, { to_date: v }); upsert(m.id, { to_date: v }); const sug=suggestAmountByRange(rec.from_date||null, v); if(sug!==null){ setLocal(m.id, { amount: sug }); upsert(m.id, { amount: sug }); } }} />
-                      </div>
+                        清除
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {members.length===0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-3xl">👥</span>
+                      <span>暂无成员</span>
                     </div>
                   </td>
-                  <td className="px-4 py-2 text-right">
-                    <button className="badge badge-muted" onClick={async()=>{ await fetch(`/api/members/pay?member_id=${m.id}&year=${year}&month=${month}`, { method:'DELETE' }); await reload(); }}>清除</button>
-                  </td>
                 </tr>
-              );
-            })}
-            {members.length===0 && <tr><td colSpan={5} className="px-4 py-4 text-center text-muted">暂无成员</td></tr>}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
-import Announcements from "../components/Announcements";
+import Link from "next/link";
+import AnnouncementCenter from "../components/AnnouncementCenter";
 import Shell from "./Shell";
 import OverviewCards from "../components/OverviewCards";
 import MenuCards from "../components/MenuCards";
@@ -9,18 +10,26 @@ export default function DashboardPage() {
   return (
     <Shell>
       <div id="dashboard" className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800"></h2>
-          </div>
-        </div>
         <OverviewCards />
-        <Announcements />
+        <AnnouncementCenter />
       </div>
 
-      {/* 首页仅保留三列“菜单预览” */}
+      {/* 菜单预览区域 - 深色主题设计 */}
       <div id="menu-preview" className="mt-8 space-y-6">
-        <MenuCards preview />
+        <div className="bg-gradient-to-br from-emerald-900/30 to-teal-900/30 border border-emerald-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md">
+              <span className="text-white text-lg">🍽️</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+                菜单预览
+              </h3>
+              <p className="text-emerald-400/70 font-medium text-sm">今日推荐菜品</p>
+            </div>
+          </div>
+          <MenuCards preview />
+        </div>
       </div>
     </Shell>
   );

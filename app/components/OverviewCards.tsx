@@ -119,12 +119,54 @@ export default function OverviewCards() {
     })();
   }, [currentWeekNumber, baseDate]);
 
+  const [shoppingListItems, setShoppingListItems] = useState<any[]>([]);
+
+  // 获取实时购物清单数据
+  useEffect(() => {
+    const fetchShoppingList = async () => {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+          .from('shopping_list')
+          .select('*');
+        
+        if (!error && data) {
+          setShoppingListItems(data);
+        }
+      } catch (error) {
+        console.error('获取购物清单失败:', error);
+      }
+    };
+
+    fetchShoppingList();
+
+    // 设置实时监听
+    const supabase = getSupabaseClient();
+    const subscription = supabase
+      .channel('shopping_list_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'shopping_list' },
+        () => {
+          fetchShoppingList();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const todayNeedsShopping = useMemo(() => {
-    // 简单规则：如果购物清单存在未分类或非空，则提示需要采购
-    const list = plan?.shopping_list_json ?? {};
-    const sum = Object.values(list).reduce((acc, v) => acc + (Array.isArray(v) ? v.length : 0), 0);
-    return sum > 0;
-  }, [plan]);
+    // 正确的逻辑：检查是否有未勾选的购物清单项目
+    if (shoppingListItems.length === 0) {
+      return false; // 没有购物清单，无需采购
+    }
+    
+    // 如果有任何未勾选的项目，则需要采购
+    const uncheckedItems = shoppingListItems.filter(item => !item.checked);
+    return uncheckedItems.length > 0;
+  }, [shoppingListItems]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -134,6 +176,7 @@ export default function OverviewCards() {
 
   return (
     <>
+      {/* 装饰图片区域 - 保留原有设计 */}
       <div className="relative mb-8">
         <img 
           src="https://images.unsplash.com/photo-1543352632-5a4b24e4d2a6?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb"
@@ -148,13 +191,14 @@ export default function OverviewCards() {
         </div>
       </div>
       
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-muted">当前周期</div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm text-muted">选择日期</label>
+      {/* 时间控制区域 - 深色主题设计 */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="text-gray-400 font-medium">当前周期</div>
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-medium text-gray-400">选择日期</label>
           <input
             type="date"
-            className="border border-neutral-200 rounded px-2 py-1 text-sm"
+            className="border border-slate-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 text-sm focus:border-slate-600/50 focus:ring-2 focus:ring-slate-900/30 transition-all duration-200"
             value={formatDate(baseDate)}
             onChange={(e) => {
               const val = e.target.value;
@@ -162,58 +206,131 @@ export default function OverviewCards() {
             }}
           />
           <button
-            className="text-sm text-primary"
+            className="bg-gradient-to-r from-slate-500 to-gray-600 hover:from-slate-600 hover:to-gray-700 text-white font-medium px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
             onClick={() => setBaseDate(new Date())}
           >
             本周
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link href="/people" className="ui-card rounded-xl p-5 card-hover animate-slide-up block" style={{ animationDelay: "0.1s" }}>
+
+      {/* 概览卡片网格 - 深色主题设计 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* 吃饭人数卡片 */}
+        <Link href="/people" className="group bg-gradient-to-br from-purple-900/30 to-indigo-900/30 border border-purple-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 block animate-slide-up" style={{ animationDelay: "0.1s" }}>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-muted text-sm">本周吃饭人数</p>
-              <div className="flex items-center gap-2">
-                <h3 className="text-3xl font-bold mt-1 text-heading">{headcount}人</h3>
+            <div className="flex-1">
+              <p className="text-purple-400/70 text-sm font-medium mb-2">本周吃饭人数</p>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">{headcount}</h3>
+                <span className="text-purple-400 font-semibold">人</span>
               </div>
-              <p className="text-primary text-sm mt-2 flex items-center"><i className="fa fa-level-up mr-1" />点击进入人数管理，可编辑</p>
+              <p className="text-purple-400/80 text-sm flex items-center gap-1 group-hover:text-purple-300 transition-colors duration-200">
+                <span className="text-xs">📊</span>
+                点击进入人数管理
+              </p>
             </div>
-            <div className="icon-circle bg-primary-50 text-primary"><i className="fa fa-users" /></div>
+            <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-200">
+              <span className="text-white text-xl">👥</span>
+            </div>
           </div>
         </Link>
-        <Link href="/people" className="ui-card rounded-xl p-5 card-hover animate-slide-up block" style={{ animationDelay: "0.2s" }}>
+
+        {/* 值班人员卡片 */}
+        <Link href="/people" className="group bg-gradient-to-br from-emerald-900/30 to-teal-900/30 border border-emerald-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 block animate-slide-up" style={{ animationDelay: "0.2s" }}>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-muted text-sm">当前值班人</p>
-              <h3 className="text-xl font-bold mt-1 text-heading">{onDuty || "未设置"}</h3>
+            <div className="flex-1">
+              <p className="text-emerald-400/70 text-sm font-medium mb-2">当前值班人</p>
+              <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-3 min-h-[28px]">
+                {onDuty || "未设置"}
+              </h3>
+              <p className="text-emerald-400/80 text-sm flex items-center gap-1 group-hover:text-emerald-300 transition-colors duration-200">
+                <span className="text-xs">⚡</span>
+                查看值班安排
+              </p>
             </div>
-            <div className="icon-circle bg-primary-50 text-primary"><i className="fa fa-user" /></div>
+            <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-200">
+              <span className="text-white text-xl">👨‍🍳</span>
+            </div>
           </div>
         </Link>
-        <Link href="/shopping" className="ui-card rounded-xl p-5 card-hover animate-slide-up block" style={{ animationDelay: "0.3s" }}>
+
+        {/* 采购状态卡片 */}
+        <Link href="/shopping" className="group bg-gradient-to-br from-orange-900/30 to-amber-900/30 border border-orange-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 block animate-slide-up" style={{ animationDelay: "0.3s" }}>
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-muted text-sm">今日是否采购</p>
-              <h3 className={`text-xl font-bold mt-1 ${todayNeedsShopping ? "text-secondary" : "text-primary"}`}>{todayNeedsShopping ? "需要采购" : "无需采购"}</h3>
-              <p className="text-muted text-sm mt-2">建议 18:00 前完成</p>
+            <div className="flex-1">
+              <p className="text-orange-400/70 text-sm font-medium mb-2">今日采购状态</p>
+              <h3 className={`text-xl font-bold mb-3 min-h-[28px] ${
+                shoppingListItems.length === 0 
+                  ? "text-gray-400" 
+                  : todayNeedsShopping 
+                    ? "bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent" 
+                    : "bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent"
+              }`}>
+                {shoppingListItems.length === 0 
+                  ? "暂无清单" 
+                  : todayNeedsShopping 
+                    ? "需要采购" 
+                    : "已完成采购"
+                }
+              </h3>
+              <p className="text-orange-400/80 text-sm group-hover:text-orange-300 transition-colors duration-200">
+                {shoppingListItems.length === 0 
+                  ? "点击添加购物清单" 
+                  : todayNeedsShopping 
+                    ? `还有 ${shoppingListItems.filter(item => !item.checked).length} 项未完成`
+                    : "所有物品已采购完成"
+                }
+              </p>
             </div>
-            <div className="icon-circle bg-primary-50 text-secondary"><i className="fa fa-shopping-cart" /></div>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-200 ${
+              shoppingListItems.length === 0 
+                ? "bg-gradient-to-br from-gray-500 to-gray-600" 
+                : todayNeedsShopping 
+                  ? "bg-gradient-to-br from-orange-500 to-amber-600" 
+                  : "bg-gradient-to-br from-green-500 to-emerald-600"
+            }`}>
+              <span className="text-white text-xl">
+                {shoppingListItems.length === 0 
+                  ? "📝" 
+                  : todayNeedsShopping 
+                    ? "🛒" 
+                    : "✅"
+                }
+              </span>
+            </div>
           </div>
         </Link>
-        <Link href="/finance" className="ui-card rounded-xl p-5 card-hover animate-slide-up block" style={{ animationDelay: "0.4s" }}>
+
+        {/* 预算状态卡片 */}
+        <Link href="/finance" className="group bg-gradient-to-br from-cyan-900/30 to-blue-900/30 border border-cyan-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 block animate-slide-up" style={{ animationDelay: "0.4s" }}>
           <div className="flex items-start justify-between">
-            <div className="w-full">
-              <p className="text-muted text-sm">本月预算</p>
-              <h3 className="text-xl font-bold mt-1 text-heading">¥{monthlyExpense.toFixed(0)} / ¥{monthlyBudget.toFixed(0)}</h3>
-              <div className="mt-3">
-                <div className="progress-bar" style={{
-                  // @ts-ignore
-                  "--progress": monthlyBudget > 0 ? `${Math.min((monthlyExpense / monthlyBudget) * 100, 100)}%` : "0%",
-                }} />
+            <div className="flex-1">
+              <p className="text-cyan-400/70 text-sm font-medium mb-2">本月预算</p>
+              <h3 className="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent mb-3">
+                ¥{monthlyExpense.toFixed(0)} / ¥{monthlyBudget.toFixed(0)}
+              </h3>
+              {/* 现代化进度条 - 深色主题 */}
+              <div className="w-full bg-gray-700 rounded-full h-2 shadow-inner mb-2">
+                <div 
+                  className={`h-2 rounded-full transition-all duration-500 ease-out shadow-sm ${
+                    monthlyBudget > 0 && (monthlyExpense / monthlyBudget) >= 1 ? 'bg-gradient-to-r from-red-500 to-red-600' : 
+                    monthlyBudget > 0 && (monthlyExpense / monthlyBudget) >= 0.9 ? 'bg-gradient-to-r from-orange-500 to-red-500' : 
+                    monthlyBudget > 0 && (monthlyExpense / monthlyBudget) >= 0.8 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' : 
+                    'bg-gradient-to-r from-cyan-500 to-blue-500'
+                  }`}
+                  style={{ 
+                    width: monthlyBudget > 0 ? `${Math.min((monthlyExpense / monthlyBudget) * 100, 100)}%` : "0%" 
+                  }}
+                ></div>
               </div>
+              <p className="text-cyan-400/80 text-sm group-hover:text-cyan-300 transition-colors duration-200">
+                查看详细财务信息
+              </p>
             </div>
-            <div className="icon-circle bg-primary-50 text-primary"><i className="fa fa-money" /></div>
+            <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-200">
+              <span className="text-white text-xl">💰</span>
+            </div>
           </div>
         </Link>
       </div>
