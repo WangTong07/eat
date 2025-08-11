@@ -133,9 +133,36 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
         <div className="h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pr-2">
             {recs.map((r, i) => {
-            // 智能背景图片匹配系统 - 使用经过验证的稳定图片链接
+            // 智能背景图片匹配系统 - 全面优化版本，确保所有菜品都有合适背景图
             const getSmartBackgroundImage = (dishName: string, ingredients: string[]) => {
-              // 肉类菜品图片库 - 更新为稳定链接
+              // 水果类图片库 - 专门为西瓜等水果准备
+              const fruitImages = [
+                'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&h=300&fit=crop&crop=center', // 西瓜切片
+                'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=400&h=300&fit=crop&crop=center', // 新鲜水果
+                'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=400&h=300&fit=crop&crop=center', // 水果拼盘
+                'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&h=300&fit=crop&crop=center', // 夏季水果
+                'https://images.unsplash.com/photo-1601004890684-d8cbf643f5f2?w=400&h=300&fit=crop&crop=center', // 切好的水果
+              ];
+
+              // 面食类图片库 - 专门为饺子、面条等面食准备
+              const noodleImages = [
+                'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop&crop=center', // 饺子
+                'https://images.unsplash.com/photo-1617093727343-374698b1b08d?w=400&h=300&fit=crop&crop=center', // 中式面食
+                'https://images.unsplash.com/photo-1555126634-323283e090fa?w=400&h=300&fit=crop&crop=center', // 面条
+                'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=400&h=300&fit=crop&crop=center', // 意面
+                'https://images.unsplash.com/photo-1551892374-ecf8754cf8b0?w=400&h=300&fit=crop&crop=center', // 面食料理
+              ];
+
+              // 豆制品图片库 - 更新为更稳定的链接
+              const tofuImages = [
+                'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&crop=center', // 豆腐料理
+                'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=400&h=300&fit=crop&crop=center', // 中式菜品
+                'https://images.unsplash.com/photo-1559847844-d721426d6edc?w=400&h=300&fit=crop&crop=center', // 亚洲料理
+                'https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=400&h=300&fit=crop&crop=center', // 美食拼盘
+                'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&h=300&fit=crop&crop=center', // 综合菜品
+              ];
+
+              // 肉类菜品图片库
               const meatImages = [
                 'https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?w=400&h=300&fit=crop&crop=center', // 牛肉料理
                 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&crop=center', // 鸡肉料理
@@ -145,7 +172,7 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
                 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&h=300&fit=crop&crop=center', // 精美肉菜
               ];
 
-              // 蔬菜类图片库 - 更新为稳定链接
+              // 蔬菜类图片库
               const vegetableImages = [
                 'https://images.unsplash.com/photo-1576045057995-568f588f82fb?w=400&h=300&fit=crop&crop=center', // 绿叶蔬菜
                 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop&crop=center', // 沙拉蔬菜
@@ -154,15 +181,7 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
                 'https://images.unsplash.com/photo-1590779033100-9f60a05a013d?w=400&h=300&fit=crop&crop=center', // 炒青菜
               ];
 
-              // 豆制品图片库 - 使用稳定的豆腐相关图片
-              const tofuImages = [
-                'https://images.unsplash.com/photo-1563379091339-03246963d96c?w=400&h=300&fit=crop&crop=center', // 豆腐料理
-                'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=400&h=300&fit=crop&crop=center', // 亚洲料理
-                'https://images.unsplash.com/photo-1559847844-d721426d6edc?w=400&h=300&fit=crop&crop=center', // 中式菜品
-                'https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=400&h=300&fit=crop&crop=center', // 美食拼盘
-              ];
-
-              // 汤品类图片库 - 更新为稳定链接
+              // 汤品类图片库
               const soupImages = [
                 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=400&h=300&fit=crop&crop=center', // 汤品
                 'https://images.unsplash.com/photo-1547592180-85f173990554?w=400&h=300&fit=crop&crop=center', // 热汤
@@ -170,11 +189,19 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
                 'https://images.unsplash.com/photo-1547592166-23ac45744acd?w=400&h=300&fit=crop&crop=center', // 中式汤
               ];
 
-              // 蛋类图片库 - 更新为稳定链接
+              // 蛋类图片库
               const eggImages = [
                 'https://images.unsplash.com/photo-1506084868230-bb9d95c24759?w=400&h=300&fit=crop&crop=center', // 炒蛋
                 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=400&h=300&fit=crop&crop=center', // 蛋料理
                 'https://images.unsplash.com/photo-1482049016688-2d3e1b311543?w=400&h=300&fit=crop&crop=center', // 蛋菜
+              ];
+
+              // 海鲜类图片库
+              const seafoodImages = [
+                'https://images.unsplash.com/photo-1559847844-5315695dadae?w=400&h=300&fit=crop&crop=center', // 海鲜料理
+                'https://images.unsplash.com/photo-1565299507177-b0ac66763828?w=400&h=300&fit=crop&crop=center', // 鱼类
+                'https://images.unsplash.com/photo-1544943910-4c1dc44aab44?w=400&h=300&fit=crop&crop=center', // 虾类
+                'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=300&fit=crop&crop=center', // 海鲜拼盘
               ];
 
               // 通用美食图片库 - 最稳定的备用图片
@@ -184,9 +211,9 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
                 'https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=400&h=300&fit=crop&crop=center', // 美食拼盘
                 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=400&h=300&fit=crop&crop=center', // 中式菜品
                 'https://images.unsplash.com/photo-1559847844-d721426d6edc?w=400&h=300&fit=crop&crop=center', // 亚洲料理
-                'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=400&h=300&fit=crop&crop=center', // 意面料理
-                'https://images.unsplash.com/photo-1563379091339-03246963d96c?w=400&h=300&fit=crop&crop=center', // 豆腐料理
                 'https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=400&h=300&fit=crop&crop=center', // 烤肉
+                'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&crop=center', // 料理
+                'https://images.unsplash.com/photo-1551183053-bf91a1d81141?w=400&h=300&fit=crop&crop=center', // 意面料理
               ];
 
               // 强化哈希函数，确保稳定分配
@@ -200,30 +227,73 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
                 return Math.abs(hash);
               };
 
-              // 智能匹配逻辑 - 优化关键词匹配
+              // 智能匹配逻辑 - 全面优化，确保所有菜品都能正确匹配
               const dishLower = dishName.toLowerCase();
               const ingredientsStr = ingredients.join('').toLowerCase();
               const fullText = dishLower + ingredientsStr;
 
-              // 豆制品优先匹配（解决麻婆豆腐问题）
-              if (fullText.includes('豆腐') || fullText.includes('豆干') || fullText.includes('豆皮') || 
-                  fullText.includes('豆') || dishLower.includes('麻婆')) {
+              // 调试日志 - 帮助诊断匹配问题
+              console.log(`[图片匹配] 菜品: ${dishName}, 食材: ${ingredients.join(', ')}, 全文: ${fullText}`);
+
+              // 水果类优先匹配（解决西瓜问题）
+              if (dishLower.includes('西瓜') || dishLower.includes('苹果') || dishLower.includes('香蕉') || 
+                  dishLower.includes('橙子') || dishLower.includes('葡萄') || dishLower.includes('梨') ||
+                  dishLower.includes('桃') || dishLower.includes('草莓') || dishLower.includes('猕猴桃') ||
+                  fullText.includes('水果') || ingredients.some(ing => 
+                    ['西瓜', '苹果', '香蕉', '橙子', '葡萄', '梨', '桃', '草莓', '猕猴桃'].includes(ing)
+                  )) {
+                const index = stableHash(dishName) % fruitImages.length;
+                console.log(`[图片匹配] ${dishName} -> 水果类图片 ${index}`);
+                return fruitImages[index];
+              }
+
+              // 面食类匹配（饺子等）
+              if (fullText.includes('饺子') || fullText.includes('包子') || fullText.includes('馄饨') || 
+                  fullText.includes('面条') || fullText.includes('拉面') || fullText.includes('面粉') ||
+                  dishLower.includes('饺') || dishLower.includes('面') || dishLower.includes('粉')) {
+                const index = stableHash(dishName) % noodleImages.length;
+                console.log(`[图片匹配] ${dishName} -> 面食类图片 ${index}`);
+                return noodleImages[index];
+              }
+
+              // 豆制品匹配（麻婆豆腐等）
+              if (dishLower.includes('豆腐') || dishLower.includes('麻婆') || dishLower.includes('豆干') || 
+                  dishLower.includes('豆皮') || fullText.includes('豆腐') || fullText.includes('豆干') || 
+                  fullText.includes('豆皮') || fullText.includes('嫩豆腐') || ingredients.some(ing => 
+                    ['豆腐', '嫩豆腐', '豆干', '豆皮', '豆'].includes(ing)
+                  )) {
                 const index = stableHash(dishName) % tofuImages.length;
+                console.log(`[图片匹配] ${dishName} -> 豆制品图片 ${index}`);
                 return tofuImages[index];
+              }
+
+              // 海鲜类匹配
+              if (fullText.includes('虾') || fullText.includes('蟹') || fullText.includes('鱼') || 
+                  fullText.includes('贝') || fullText.includes('海鲜') || dishLower.includes('虾') ||
+                  dishLower.includes('鱼') || dishLower.includes('蟹')) {
+                const index = stableHash(dishName) % seafoodImages.length;
+                console.log(`[图片匹配] ${dishName} -> 海鲜类图片 ${index}`);
+                return seafoodImages[index];
               }
 
               // 肉类菜品
               if (fullText.includes('排骨') || fullText.includes('红烧') || fullText.includes('牛肉') || 
                   fullText.includes('猪肉') || fullText.includes('鸡肉') || fullText.includes('羊肉') ||
-                  fullText.includes('肉末') || fullText.includes('肉丝') || dishLower.includes('肉')) {
+                  fullText.includes('肉末') || fullText.includes('肉丝') || dishLower.includes('肉') ||
+                  fullText.includes('鸡翅') || fullText.includes('鸭') || dishLower.includes('鸡') ||
+                  fullText.includes('牛肉末') || fullText.includes('鸡腿') || ingredients.some(ing => 
+                    ['鸡腿', '鸡翅', '牛肉', '猪肉', '羊肉', '牛肉末', '肉'].includes(ing)
+                  )) {
                 const index = stableHash(dishName) % meatImages.length;
+                console.log(`[图片匹配] ${dishName} -> 肉类图片 ${index}`);
                 return meatImages[index];
               }
 
               // 蛋类菜品
               if (fullText.includes('鸡蛋') || fullText.includes('蛋') || fullText.includes('炒蛋') ||
-                  dishLower.includes('蛋')) {
+                  dishLower.includes('蛋') || ingredients.some(ing => ['鸡蛋', '蛋'].includes(ing))) {
                 const index = stableHash(dishName) % eggImages.length;
+                console.log(`[图片匹配] ${dishName} -> 蛋类图片 ${index}`);
                 return eggImages[index];
               }
 
@@ -231,18 +301,22 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
               if (fullText.includes('汤') || fullText.includes('羹') || fullText.includes('煲') ||
                   dishLower.includes('汤') || dishLower.includes('羹')) {
                 const index = stableHash(dishName) % soupImages.length;
+                console.log(`[图片匹配] ${dishName} -> 汤品类图片 ${index}`);
                 return soupImages[index];
               }
 
               // 蔬菜类
               if (fullText.includes('青菜') || fullText.includes('白菜') || fullText.includes('菠菜') ||
-                  fullText.includes('蔬菜') || fullText.includes('菜心') || dishLower.includes('菜')) {
+                  fullText.includes('蔬菜') || fullText.includes('菜心') || dishLower.includes('菜') ||
+                  ingredients.some(ing => ['青菜', '白菜', '菠菜', '蔬菜', '菜心'].includes(ing))) {
                 const index = stableHash(dishName) % vegetableImages.length;
+                console.log(`[图片匹配] ${dishName} -> 蔬菜类图片 ${index}`);
                 return vegetableImages[index];
               }
 
-              // 兜底机制：使用通用美食图片（扩展的8张图片确保足够多样性）
+              // 兜底机制：使用通用美食图片
               const index = stableHash(dishName) % generalFoodImages.length;
+              console.log(`[图片匹配] ${dishName} -> 通用美食图片 ${index} (兜底)`);
               return generalFoodImages[index];
             };
 
@@ -254,7 +328,7 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
             }
             
             // 兜底机制：确保背景图片存在
-            const finalBackgroundImage = backgroundImage || generalFoodImages[Math.floor(Math.random() * generalFoodImages.length)];
+            const finalBackgroundImage = backgroundImage || 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&h=300&fit=crop&crop=center';
             
             return (
               <div 

@@ -241,9 +241,29 @@ export default function OverviewCards() {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <p className="text-emerald-400/70 text-sm font-medium mb-2">当前值班人</p>
-              <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-3 min-h-[28px]">
-                {onDuty || "未设置"}
-              </h3>
+              <div className="mb-3 min-h-[32px]">
+                {onDuty ? (
+                  onDuty.includes('、') ? (
+                    // 多个值班人员，上下双排显示
+                    <div className="space-y-1">
+                      {onDuty.split('、').map((person, index) => (
+                        <h3 key={index} className="text-lg font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent leading-tight">
+                          {person.trim()}
+                        </h3>
+                      ))}
+                    </div>
+                  ) : (
+                    // 单个值班人员，正常显示
+                    <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+                      {onDuty}
+                    </h3>
+                  )
+                ) : (
+                  <h3 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+                    未设置
+                  </h3>
+                )}
+              </div>
               <p className="text-emerald-400/80 text-sm flex items-center gap-1 group-hover:text-emerald-300 transition-colors duration-200">
                 <span className="text-xs">⚡</span>
                 查看值班安排
