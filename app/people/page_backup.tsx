@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 import { getFreshHouseholdMembers, clearLocalFallbackData } from "@/lib/dataUtils";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import { autoEnsureCurrentAndFutureMonths } from "@/lib/dutyAutoExtension";
 
 function isoWeekNumber(d: Date) {
   const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
@@ -105,14 +104,14 @@ export default function PeoplePage() {
     return ranges;
   }
 
-  // 🔄 加载值班安排 - 纯加载模式，不执行自动继承
+  // 🚫 完全禁用自动生成 - 纯手动值班安排加载
   const reloadAssignments = async (year: number, month: number) => {
     try {
       const supabase = getSupabaseClient();
       
-      console.log(`🔍 加载 ${year}年${month}月 值班安排（纯加载模式）`);
+      console.log(`🔍 加载 ${year}年${month}月 值班安排（纯手动模式）`);
       
-      // 1. 加载当前月的值班安排
+      // 1. 只加载当前月的值班安排，不进行任何自动操作
       const { data: currentData, error: currentError } = await supabase
         .from('duty_staff_assignments')
         .select('*')
@@ -121,15 +120,7 @@ export default function PeoplePage() {
 
       if (currentError) throw currentError;
 
-      // 2. 如果当月没有值班安排，直接返回空状态（不自动继承）
-      if (!currentData || currentData.length === 0) {
-        console.log(`📋 ${year}年${month}月 无值班安排，返回空状态`);
-        setStaffAssign({});
-        setStaffSet({});
-        return;
-      }
-
-      // 3. 加载下个月前几周的数据（仅用于显示跨月分配）
+      // 2. 加载下个月前几周的数据（仅用于显示跨月分配）
       const nextMonth = month === 12 ? 1 : month + 1;
       const nextYear = month === 12 ? year + 1 : year;
       
@@ -140,7 +131,7 @@ export default function PeoplePage() {
         .eq('month', nextMonth)
         .lte('week_in_month', 2); // 只取下月前2周
 
-      // 4. 处理当前月数据
+      // 3. 处理当前月数据
       const serverMap: Record<string, number|null> = {};
       const serverPresent: Record<string, boolean> = {};
       
@@ -149,7 +140,7 @@ export default function PeoplePage() {
         serverPresent[x.member_id] = true; 
       });
 
-      // 5. 处理下月数据（显示为负数，表示下月）
+      // 4. 处理下月数据（显示为负数，表示下月）
       (nextMonthData || []).forEach((x: any) => {
         if (!serverPresent[x.member_id]) { // 避免重复
           serverMap[x.member_id] = -(x.week_in_month ?? 0); // 负数表示下月
@@ -222,9 +213,6 @@ export default function PeoplePage() {
 
   useEffect(() => {
     (async () => {
-      // 首先确保自动延续数据存在
-      await autoEnsureCurrentAndFutureMonths();
-      
       // 直接从数据库加载，不使用本地存储
       
       const res = await fetch("/api/headcount/today");
@@ -301,21 +289,13 @@ export default function PeoplePage() {
     }
   });
 
-  // 添加值班安排表的实时订阅 - 使用防抖机制避免频繁重新加载
+  // 添加值班安排表的实时订阅
   useRealtimeSubscription({
     table: 'duty_staff_assignments',
-    onChange: useCallback(() => {
-      console.log('[PeoplePage] 检测到值班安排变更，延迟重新加载...');
-      
-      // 使用防抖机制，避免在短时间内多次重新加载
-      const timeoutId = setTimeout(() => {
-        console.log('[PeoplePage] 执行延迟重新加载');
-        reloadAssignments(assignYear, assignMonth);
-      }, 500); // 500ms 防抖延迟
-      
-      // 清除之前的定时器
-      return () => clearTimeout(timeoutId);
-    }, [assignYear, assignMonth])
+    onChange: () => {
+      console.log('[PeoplePage] 检测到值班安排变更，重新加载...');
+      reloadAssignments(assignYear, assignMonth);
+    }
   });
 
   return (
@@ -332,8 +312,8 @@ export default function PeoplePage() {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="ui-card rounded-xl p-5">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="ui-card rounded-xl p-5 lg:col-span-3">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-bold">
               成员列表
@@ -346,22 +326,23 @@ export default function PeoplePage() {
           </div>
           <div className="space-y-1 max-h-80 overflow-auto pr-2">
             {members.map(m => (
-              <div key={m.id} className="grid grid-cols-4 items-center text-sm py-1.5 border-b last:border-b-0">
+              <div key={m.id} className="grid grid-cols-4 items-center text-sm py-2 border-b last:border-b-0">
                 <div className="truncate col-span-2">{m.name}</div>
-                <div className="text-right col-span-2">
-                  <div className="flex items-center justify-end gap-2">
+                <div className="col-span-1">
+                  <div className="inline-flex rounded-full border border-gray-300 overflow-hidden">
                     <button
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition-all duration-200 min-w-[80px] ${
-                        m.is_active
-                          ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      className={`px-4 py-1 text-sm font-medium transition-colors ${
+                        m.is_active 
+                          ? 'bg-green-500 text-white' 
+                          : 'bg-white text-gray-700 hover:bg-gray-50'
                       }`}
                       onClick={async()=>{
+                        if (m.is_active) return; // 已经是激活状态，不需要重复点击
                         try {
                           const supabase = getSupabaseClient();
                           const { error } = await supabase
                             .from('household_members')
-                            .update({ is_active: !m.is_active })
+                            .update({ is_active: true })
                             .eq('id', m.id);
                           if (error) throw error;
                           
@@ -385,48 +366,62 @@ export default function PeoplePage() {
                         }
                       }}
                     >
-                      <span>{m.is_active ? '🍽️' : '🚫'}</span>
-                      <span className="font-medium">{m.is_active ? '吃饭' : '不吃'}</span>
+                      本周吃饭
                     </button>
-                    {/* 值班人员标记 - 智能跨月分配逻辑 */}
                     <button
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm transition-all duration-200 min-w-[80px] ${
-                        !!staffSet[m.id]
-                          ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      className={`px-4 py-1 text-sm font-medium transition-colors ${
+                        !m.is_active 
+                          ? 'bg-gray-500 text-white' 
+                          : 'bg-white text-gray-700 hover:bg-gray-50'
                       }`}
                       onClick={async()=>{
+                        if (!m.is_active) return; // 已经是非激活状态，不需要重复点击
                         try {
                           const supabase = getSupabaseClient();
-                          if (!staffSet[m.id]) {
-                            // 添加到值班人员 - 先清除可能存在的记录，避免唯一约束冲突
-                            console.log(`[添加值班人员] 开始为 ${m.name} 添加值班安排`);
-                            
-                            // 1. 先清除该成员在当月和下月的所有记录，避免约束冲突
-                            const nextMonth = assignMonth === 12 ? 1 : assignMonth + 1;
-                            const nextYear = assignMonth === 12 ? assignYear + 1 : assignYear;
-                            
-                            await supabase
-                              .from('duty_staff_assignments')
-                              .delete()
-                              .eq('member_id', m.id)
-                              .eq('year', assignYear)
-                              .eq('month', assignMonth);
-                            
-                            await supabase
-                              .from('duty_staff_assignments')
-                              .delete()
-                              .eq('member_id', m.id)
-                              .eq('year', nextYear)
-                              .eq('month', nextMonth);
-                            
-                            console.log(`[清理完成] 已清除 ${m.name} 在 ${assignYear}年${assignMonth}月 和 ${nextYear}年${nextMonth}月 的记录`);
-                            
-                            // 2. 获取当月的工作周数量
+                          const { error } = await supabase
+                            .from('household_members')
+                            .update({ is_active: false })
+                            .eq('id', m.id);
+                          if (error) throw error;
+                          
+                          // 手动重新加载成员数据，确保界面立即更新
+                          try {
+                            setSyncing(true);
+                            const data = await getFreshHouseholdMembers();
+                            setMembers(data || []);
+                            clearLocalFallbackData();
+                          } catch {
+                            try {
+                              const r2 = await fetch('/api/members');
+                              const j2 = await r2.json();
+                              setMembers(j2.items || []);
+                            } catch {}
+                          } finally {
+                            setSyncing(false);
+                          }
+                        } catch (error: any) {
+                          console.error('更新成员状态失败:', error);
+                        }
+                      }}
+                    >
+                      不吃
+                    </button>
+                  </div>
+                </div>
+                <div className="text-right col-span-1 flex items-center justify-end gap-3">
+                  {/* 值班人员标记 - 智能跨月分配逻辑 */}
+                  <label className="inline-flex items-center gap-1 text-primary">
+                    <input type="checkbox"
+                      checked={!!staffSet[m.id]}
+                      onChange={async(e)=>{
+                        try {
+                          const supabase = getSupabaseClient();
+                          if (e.target.checked) {
+                            // 获取当月的工作周数量
                             const currentMonthRanges = getRangesFor(assignYear, assignMonth);
                             const maxPossibleWeeks = currentMonthRanges.length;
                             
-                            // 3. 获取当前月份已有的最大周次
+                            // 获取当前月份已有的最大周次
                             const { data: existingData } = await supabase
                               .from('duty_staff_assignments')
                               .select('week_in_month')
@@ -441,7 +436,7 @@ export default function PeoplePage() {
                             let targetMonth = assignMonth;
                             let targetWeek = maxWeek + 1;
                             
-                            // 4. 检查是否需要跨月分配
+                            // 检查是否需要跨月分配
                             if (maxWeek >= maxPossibleWeeks) {
                               // 当月工作周都分配完了，分配到下个月第1周
                               targetMonth = assignMonth === 12 ? 1 : assignMonth + 1;
@@ -453,7 +448,7 @@ export default function PeoplePage() {
                               console.log(`[新增值班人员] ${m.name} 分配到${targetYear}年${targetMonth}月第${targetWeek}周`);
                             }
                             
-                            // 5. 插入到目标月份
+                            // 插入到目标月份
                             const { error } = await supabase
                               .from('duty_staff_assignments')
                               .insert({
@@ -465,13 +460,11 @@ export default function PeoplePage() {
                             
                             if (error) {
                               console.error('添加值班人员失败:', error);
-                              alert(`添加值班人员失败：${error.message}\n\n详细信息：${JSON.stringify(error, null, 2)}`);
+                              alert(`添加值班人员失败：${error.message}\n\n请确保在 Supabase 中创建了 duty_staff_assignments 表`);
                               return;
                             }
                             
-                            console.log(`[添加成功] ${m.name} 已成功添加到 ${targetYear}年${targetMonth}月第${targetWeek}周`);
-                            
-                            // 6. 手动重新加载数据，确保界面立即更新
+                            // 手动重新加载数据，确保界面立即更新
                             await reloadAssignments(assignYear, assignMonth);
                           } else {
                             // 从值班人员中移除 - 需要检查当月和下月
@@ -503,160 +496,115 @@ export default function PeoplePage() {
                           alert(`操作失败：${error.message}`);
                         }
                       }}
-                    >
-                      <span>{!!staffSet[m.id] ? '👷‍♂️' : '👤'}</span>
-                      <span className="font-medium">值班</span>
-                    </button>
-                  <button 
-                    className="flex items-center gap-1 px-3 py-1.5 rounded text-sm bg-red-100 text-red-600 hover:bg-red-200 cursor-pointer transition-all duration-200 min-w-[80px]" 
-                    onClick={async(e)=>{
-                      if (!confirm(`确定要删除成员"${m.name}"吗？`)) return;
+                    /> 值班人员
+                  </label>
+                  <button className="btn-link" onClick={async(e)=>{
+                    const el = e.currentTarget as HTMLButtonElement;
+                    const old = el.textContent;
+                    el.textContent = '删除中...';
+                    el.style.opacity = '0.7';
+                    try {
+                      const supabase = getSupabaseClient();
+                      const { error } = await supabase
+                        .from('household_members')
+                        .delete()
+                        .eq('id', m.id);
+                      if (error) throw error;
                       
-                      const el = e.currentTarget as HTMLButtonElement;
-                      const old = el.innerHTML;
-                      el.innerHTML = '<span>⏳</span><span class="font-medium">删除中...</span>';
-                      el.style.opacity = '0.7';
+                      // 手动重新加载成员数据，确保界面立即更新
                       try {
-                        const supabase = getSupabaseClient();
-                        const { error } = await supabase
-                          .from('household_members')
-                          .delete()
-                          .eq('id', m.id);
-                        if (error) throw error;
-                        
-                        // 手动重新加载成员数据，确保界面立即更新
+                        setSyncing(true);
+                        const data = await getFreshHouseholdMembers();
+                        setMembers(data || []);
+                        clearLocalFallbackData();
+                      } catch {
                         try {
-                          setSyncing(true);
-                          const data = await getFreshHouseholdMembers();
-                          setMembers(data || []);
-                          clearLocalFallbackData();
-                        } catch {
-                          try {
-                            const r2 = await fetch('/api/members');
-                            const j2 = await r2.json();
-                            setMembers(j2.items || []);
-                          } catch {}
-                        } finally {
-                          setSyncing(false);
-                        }
-                      } catch (error: any) {
-                        console.error('删除成员失败:', error);
-                        alert(`删除失败：${error.message}`);
+                          const r2 = await fetch('/api/members');
+                          const j2 = await r2.json();
+                          setMembers(j2.items || []);
+                        } catch {}
+                      } finally {
+                        setSyncing(false);
                       }
-                      el.innerHTML = old;
-                      el.style.opacity = '1';
-                    }}
-                  >
-                    <span>🗑️</span>
-                    <span className="font-medium">删除</span>
-                  </button>
-                  </div>
+                    } catch (error: any) {
+                      console.error('删除成员失败:', error);
+                    }
+                    el.textContent = old || '删除';
+                    el.style.opacity = '1';
+                  }}>删除</button>
                 </div>
               </div>
             ))}
             {members.length === 0 && <div className="text-muted text-sm">暂无成员</div>}
           </div>
-          <div className="mt-4 ui-card rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="font-bold text-heading flex items-center gap-2">
-                <span>👤</span>
-                <span>添加新成员</span>
-              </h4>
-              <span className="badge badge-secondary">新增</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <input 
-                value={newName} 
-                onChange={e=>setNewName(e.target.value)} 
-                placeholder="请输入成员姓名..." 
-                className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
-                onKeyPress={e => e.key === 'Enter' && newName.trim() && document.getElementById('add-member-btn')?.click()}
-              />
-              <button 
-                id="add-member-btn"
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm bg-blue-500 text-white hover:bg-blue-600 cursor-pointer transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed" 
-                disabled={!newName.trim() || syncing}
-                onClick={async()=>{
-                  if (!newName.trim()) return;
+          <div className="mt-4 flex items-center gap-2">
+            <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="姓名" className="border rounded px-3 py-2" />
+            <button className="badge badge-primary" onClick={async()=>{
+              if (!newName.trim()) return;
+              try {
+                const supabase = getSupabaseClient();
+                const { error } = await supabase
+                  .from('household_members')
+                  .insert({ name: newName.trim(), is_active: true });
+                
+                if (error) throw error;
+                
+                setNewName('');
+                
+                // 手动重新加载成员数据，确保界面立即更新
+                try {
+                  setSyncing(true);
+                  const data = await getFreshHouseholdMembers();
+                  setMembers(data || []);
+                  clearLocalFallbackData();
+                } catch {
                   try {
-                    const supabase = getSupabaseClient();
-                    const { error } = await supabase
-                      .from('household_members')
-                      .insert({ name: newName.trim(), is_active: true });
-                    
-                    if (error) throw error;
-                    
-                    setNewName('');
-                    
-                    // 手动重新加载成员数据，确保界面立即更新
-                    try {
-                      setSyncing(true);
-                      const data = await getFreshHouseholdMembers();
-                      setMembers(data || []);
-                      clearLocalFallbackData();
-                    } catch {
-                      try {
-                        const r2 = await fetch('/api/members');
-                        const j2 = await r2.json();
-                        setMembers(j2.items || []);
-                      } catch {}
-                    } finally {
-                      setSyncing(false);
-                    }
-                  } catch (error: any) {
-                    console.error('添加成员失败:', error);
-                    alert(`添加成员失败：${error.message}`);
-                  }
-                }}
-              >
-                <span>➕</span>
-                <span className="font-medium">{syncing ? '添加中...' : '添加成员'}</span>
-              </button>
-            </div>
+                    const r2 = await fetch('/api/members');
+                    const j2 = await r2.json();
+                    setMembers(j2.items || []);
+                  } catch {}
+                } finally {
+                  setSyncing(false);
+                }
+              } catch (error: any) {
+                console.error('添加成员失败:', error);
+                alert(`添加成员失败：${error.message}`);
+              }
+            }}>添加成员</button>
           </div>
         </div>
+      </div>
 
-        <div className="ui-card rounded-xl p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold text-heading">值班人员</h3>
-            <div className="flex items-center gap-2 text-sm">
-              <button 
-                className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-600 hover:bg-purple-200 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md" 
-                onClick={() => {
-                  // 限制：不允许回到2025年8月之前
-                  if (assignYear === 2025 && assignMonth === 8) {
-                    alert('不能回到2025年8月之前');
-                    return;
-                  }
-                  
-                  if (assignMonth === 1) {
-                    setAssignYear(assignYear - 1);
-                    setAssignMonth(12);
-                  } else {
-                    setAssignMonth(assignMonth - 1);
-                  }
-                }}
-              >
-                <span>⬅️</span>
-              </button>
-              <span className="font-bold text-lg text-blue-600">{assignYear}年{assignMonth}月</span>
-              <button 
-                className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-600 hover:bg-purple-200 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md" 
-                onClick={() => {
-                  if (assignMonth === 12) {
-                    setAssignYear(assignYear + 1);
-                    setAssignMonth(1);
-                  } else {
-                    setAssignMonth(assignMonth + 1);
-                  }
-                }}
-              >
-                <span>➡️</span>
-              </button>
-            </div>
-            <button 
-              className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-indigo-100 text-indigo-600 hover:bg-indigo-200 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md" 
-              onClick={async()=>{
+      <div className="mt-6 ui-card rounded-xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-heading">值班人员（本月）</h3>
+          <div className="flex items-center gap-2 text-sm">
+            <label>年份</label>
+            <button className="badge badge-muted" onClick={() => {
+              // 限制：不允许回到2025年8月之前
+              if (assignYear === 2025 && assignMonth === 8) {
+                alert('不能回到2025年8月之前');
+                return;
+              }
+              
+              if (assignMonth === 1) {
+                setAssignYear(assignYear - 1);
+                setAssignMonth(12);
+              } else {
+                setAssignMonth(assignMonth - 1);
+              }
+            }}>上月</button>
+            <span className="font-medium">{assignYear}年{assignMonth}月</span>
+            <button className="badge badge-muted" onClick={() => {
+              if (assignMonth === 12) {
+                setAssignYear(assignYear + 1);
+                setAssignMonth(1);
+              } else {
+                setAssignMonth(assignMonth + 1);
+              }
+            }}>下月</button>
+            <button className="badge badge-muted" onClick={async()=>{ await reloadAssignments(assignYear, assignMonth); await reloadPayStatus(assignYear, assignMonth); }}>刷新</button>
+            <button className="badge badge-primary" onClick={async()=>{
               // 计算上个月
               const prevMonth = assignMonth === 1 ? 12 : assignMonth - 1;
               const prevYear = assignMonth === 1 ? assignYear - 1 : assignYear;
@@ -725,84 +673,66 @@ export default function PeoplePage() {
                 console.error('手动复制失败:', error);
                 alert(`手动复制失败：${error.message}`);
               }
-            }}
-            >
-              <span>📋</span>
-              <span className="font-medium">复制上月值班</span>
-            </button>
+            }}>手动复制上月值班</button>
+            <div className="text-muted">在"成员列表"中添加/删除成员；这里只显示已分配周次的值班成员</div>
           </div>
-          <div className="overflow-x-auto">
+        </div>
+        <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-neutral-200">
             <thead className="bg-neutral-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">姓名</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">身份</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">负责周次</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-neutral-200">
               {Object.keys(staffAssign).length === 0 && (
-                <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-muted">本月暂无值班人员</td></tr>
+                <tr><td colSpan={4} className="px-6 py-6 text-center text-sm text-muted">本月暂无值班人员</td></tr>
               )}
               {(() => {
                 const filteredMembers = members.filter(m => !!staffSet[m.id]);
                 
-                // 🎯 智能排序：未分配时间按首字母，分配后按时间
+                // 🎯 用户指定的固定顺序
+                const preferredOrder = ['正方形', '兔子', '阿源', '陶子', '大呲花', 'Ethan'];
+                
                 const sortedMembers = filteredMembers.sort((a, b) => {
-                  const aWeek = staffAssign[a.id];
-                  const bWeek = staffAssign[b.id];
+                  // 1. 获取在首选顺序中的位置
+                  const aIndex = preferredOrder.indexOf(a.name);
+                  const bIndex = preferredOrder.indexOf(b.name);
                   
-                  // 检查是否都已分配时间（null、undefined、0都视为未分配）
-                  const aHasTime = aWeek !== null && aWeek !== undefined && aWeek !== 0;
-                  const bHasTime = bWeek !== null && bWeek !== undefined && bWeek !== 0;
-                  
-                  // 如果都未分配时间，按首字母排序
-                  if (!aHasTime && !bHasTime) {
-                    return a.name.localeCompare(b.name, 'zh-CN');
+                  // 2. 如果都在首选列表中，按首选顺序排序
+                  if (aIndex !== -1 && bIndex !== -1) {
+                    return aIndex - bIndex;
                   }
                   
-                  // 如果都已分配时间，按时间先后排序
-                  if (aHasTime && bHasTime) {
-                    // 处理负数（下月）和正数（当月）的排序
-                    const aSort = aWeek < 0 ? Math.abs(aWeek) + 100 : aWeek;
-                    const bSort = bWeek < 0 ? Math.abs(bWeek) + 100 : bWeek;
-                    
-                    if (aSort !== bSort) {
-                      return aSort - bSort;
-                    }
-                    // 时间相同时按首字母排序
-                    return a.name.localeCompare(b.name, 'zh-CN');
-                  }
-                  
-                  // 混合情况：已分配时间的排在前面，未分配的排在后面
-                  if (aHasTime && !bHasTime) {
+                  // 3. 如果只有一个在首选列表中，首选的排在前面
+                  if (aIndex !== -1 && bIndex === -1) {
                     return -1; // a排在前面
                   }
-                  if (!aHasTime && bHasTime) {
+                  if (aIndex === -1 && bIndex !== -1) {
                     return 1; // b排在前面
                   }
                   
-                  return 0;
+                  // 4. 如果都不在首选列表中，按名称排序（新增人员）
+                  return a.name.localeCompare(b.name, 'zh-CN');
                 });
                 
                 // 调试信息
-                console.log(`${assignYear}年${assignMonth}月 智能排序结果:`, 
-                  sortedMembers.map(m => {
-                    const week = staffAssign[m.id];
-                    const hasTime = week !== null && week !== undefined && week !== 0;
-                    return {
-                      name: m.name, 
-                      week: week,
-                      hasTime: hasTime,
-                      sortType: hasTime ? '按时间' : '按首字母'
-                    };
-                  })
+                console.log(`${assignYear}年${assignMonth}月 用户指定顺序结果:`, 
+                  sortedMembers.map(m => ({ 
+                    name: m.name, 
+                    week: staffAssign[m.id],
+                    orderIndex: preferredOrder.indexOf(m.name)
+                  }))
                 );
                 
                 return sortedMembers;
               })().map(m => (
                 <tr key={`assign-${m.id}`}>
                   <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-neutral-900">{m.name}</td>
+                  <td className="px-6 py-3 whitespace-nowrap text-sm text-neutral-500">{m.role || '成员'}</td>
                   <td className="px-6 py-3 whitespace-nowrap text-sm">
                     <select
                       value={staffAssign[m.id] ?? ''}
@@ -833,41 +763,34 @@ export default function PeoplePage() {
                             .eq('year', nextYear)
                             .eq('month', nextMonth);
                           
-                          // 总是插入记录，保持人员在值班列表中
-                          if (v === null) {
-                            // 选择"未分配"：插入记录但week_in_month为null
-                            await supabase
-                              .from('duty_staff_assignments')
-                              .insert({
-                                member_id: m.id,
-                                week_in_month: null,
-                                year: assignYear,
-                                month: assignMonth
-                              });
-                            console.log(`✅ ${m.name} 已设置为未分配状态，保留在值班列表中`);
-                          } else if (v < 0) {
-                            // 负数表示分配到下月
-                            const nextWeek = Math.abs(v);
-                            await supabase
-                              .from('duty_staff_assignments')
-                              .insert({
-                                member_id: m.id,
-                                week_in_month: nextWeek,
-                                year: nextYear,
-                                month: nextMonth
-                              });
-                            console.log(`✅ ${m.name} 已分配到 ${nextYear}年${nextMonth}月第${nextWeek}周`);
+                          // 根据新值插入记录
+                          if (v !== null) {
+                            if (v < 0) {
+                              // 负数表示分配到下月
+                              const nextWeek = Math.abs(v);
+                              await supabase
+                                .from('duty_staff_assignments')
+                                .insert({
+                                  member_id: m.id,
+                                  week_in_month: nextWeek,
+                                  year: nextYear,
+                                  month: nextMonth
+                                });
+                              console.log(`✅ ${m.name} 已分配到 ${nextYear}年${nextMonth}月第${nextWeek}周`);
+                            } else {
+                              // 正数表示分配到当月
+                              await supabase
+                                .from('duty_staff_assignments')
+                                .insert({
+                                  member_id: m.id,
+                                  week_in_month: v,
+                                  year: assignYear,
+                                  month: assignMonth
+                                });
+                              console.log(`✅ ${m.name} 已分配到 ${assignYear}年${assignMonth}月第${v}周`);
+                            }
                           } else {
-                            // 正数表示分配到当月
-                            await supabase
-                              .from('duty_staff_assignments')
-                              .insert({
-                                member_id: m.id,
-                                week_in_month: v,
-                                year: assignYear,
-                                month: assignMonth
-                              });
-                            console.log(`✅ ${m.name} 已分配到 ${assignYear}年${assignMonth}月第${v}周`);
+                            console.log(`✅ ${m.name} 已从值班安排中移除`);
                           }
                           
                           // 手动触发数据重新加载，确保界面立即更新
@@ -903,55 +826,28 @@ export default function PeoplePage() {
                       })()}
                     </select>
                   </td>
-                  <td className="px-6 py-3 whitespace-nowrap text-right text-sm">
-                    <div className="flex justify-end">
-                      <button 
-                        className="flex items-center gap-1 px-3 py-1.5 rounded text-sm min-w-[80px] bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer transition-all duration-200" 
-                        onClick={async()=>{
-                          if (!confirm(`确定要清空"${m.name}"的时间分配吗？\n\n清空后该人员仍在值班列表中，但时间显示为"未分配"。`)) return;
-                          
-                          try {
-                            const supabase = getSupabaseClient();
-                            
-                            // 清空时间分配：将week_in_month设为null，保留人员记录
-                            const { error } = await supabase
-                              .from('duty_staff_assignments')
-                              .update({ week_in_month: null })
-                              .eq('member_id', m.id)
-                              .eq('year', assignYear)
-                              .eq('month', assignMonth);
-                            
-                            if (error) throw error;
-                            
-                            // 同时清空下月的分配（如果有的话）
-                            const nextMonth = assignMonth === 12 ? 1 : assignMonth + 1;
-                            const nextYear = assignMonth === 12 ? assignYear + 1 : assignYear;
-                            
-                            await supabase
-                              .from('duty_staff_assignments')
-                              .update({ week_in_month: null })
-                              .eq('member_id', m.id)
-                              .eq('year', nextYear)
-                              .eq('month', nextMonth);
-                            
-                            await reloadAssignments(assignYear, assignMonth);
-                            console.log(`✅ 已清空 ${m.name} 的时间分配，保留在值班列表中`);
-                          } catch (error: any) {
-                            console.error('清空时间分配失败:', error);
-                            alert(`清空失败：${error.message}`);
-                          }
-                        }}
-                      >
-                        <span>🔄</span>
-                        <span className="font-medium">清空</span>
-                      </button>
-                    </div>
+                  <td className="px-6 py-3 whitespace-nowrap text-right text-sm space-x-2">
+                    <button className="badge badge-muted" onClick={async()=>{
+                      try {
+                        const supabase = getSupabaseClient();
+                        // 从值班人员列表中移除（删除记录）
+                        await supabase
+                          .from('duty_staff_assignments')
+                          .delete()
+                          .eq('member_id', m.id)
+                          .eq('year', assignYear)
+                          .eq('month', assignMonth);
+                        await reloadAssignments(assignYear, assignMonth);
+                      } catch (error: any) {
+                        console.error('移除值班人员失败:', error);
+                        alert(`移除失败：${error.message}`);
+                      }
+                    }}>移除</button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
         </div>
       </div>
     </Shell>
