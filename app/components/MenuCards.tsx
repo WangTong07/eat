@@ -15,6 +15,9 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(false);
   const [recs, setRecs] = useState<Array<{ dish: string; ingredients: string[] }>>([]);
+  const [likeStats, setLikeStats] = useState<Record<string, number>>({});
+  const [userLikes, setUserLikes] = useState<Record<string, boolean>>({});
+  const [likingDish, setLikingDish] = useState<string | null>(null);
 
   const todayLabel = useMemo(() => {
     const d = new Date();
@@ -35,11 +38,83 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
       try {
         const r = await fetch('/api/recommendations');
         const j = await r.json();
-        setRecs(j.items || []);
+        const recommendations = j.items || [];
+        setRecs(recommendations);
+        
+        // 获取点赞统计
+        const likesRes = await fetch('/api/dish-likes');
+        const likesData = await likesRes.json();
+        setLikeStats(likesData.stats || {});
+        
+        // 获取用户点赞状态
+        if (recommendations.length > 0) {
+          const dishNames = recommendations.map((rec: any) => rec.dish);
+          const userLikesRes = await fetch('/api/dish-likes', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dish_names: dishNames })
+          });
+          const userLikesData = await userLikesRes.json();
+          setUserLikes(userLikesData.userLikes || {});
+        }
       } catch {}
       setLoading(false);
     })();
   }, []);
+
+  // 实时订阅点赞变化
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    const subscription = supabase
+      .channel('dish_likes_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'dish_likes' },
+        async () => {
+          // 重新获取点赞统计
+          try {
+            const likesRes = await fetch('/api/dish-likes');
+            const likesData = await likesRes.json();
+            setLikeStats(likesData.stats || {});
+          } catch {}
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // 处理点赞/取消点赞
+  const handleLike = async (dishName: string) => {
+    if (likingDish) return; // 防止重复点击
+    
+    setLikingDish(dishName);
+    const isLiked = userLikes[dishName];
+    const action = isLiked ? 'unlike' : 'like';
+    
+    try {
+      const response = await fetch('/api/dish-likes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dish_name: dishName, action })
+      });
+      
+      if (response.ok) {
+        // 乐观更新UI
+        setUserLikes(prev => ({ ...prev, [dishName]: !isLiked }));
+        setLikeStats(prev => ({
+          ...prev,
+          [dishName]: Math.max(0, (prev[dishName] || 0) + (isLiked ? -1 : 1))
+        }));
+      }
+    } catch (error) {
+      console.error('点赞操作失败:', error);
+    } finally {
+      setLikingDish(null);
+    }
+  };
+
 
   const menu = plan?.menu_json ?? {};
   const daysToRender = preview ? previewOrder(todayLabel) : DAY_ORDER;
@@ -58,17 +133,38 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {recs.map((r, i) => (
-            <div key={`${r.dish}-${i}`} className={`ui-card rounded-xl p-5 card-hover animate-slide-up`} style={{ animationDelay: `${0.1 * (i + 1)}s` }}>
+            <div key={`${r.dish}-${i}`} className={`ui-card rounded-xl p-5 card-hover animate-slide-up relative`} style={{ animationDelay: `${0.1 * (i + 1)}s` }}>
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-heading">{r.dish}</h3>
                 <span className="badge badge-primary">推荐</span>
               </div>
               <div className="text-sm text-muted mb-2">所需食材</div>
-              <ul className="grid grid-cols-2 gap-1 text-sm">
+              <ul className="grid grid-cols-2 gap-1 text-sm mb-4">
                 {r.ingredients.map((ing, idx) => (
                   <li key={idx} className="flex items-center"><i className="fa fa-check text-primary mr-2" />{ing}</li>
                 ))}
               </ul>
+              
+              {/* 点赞功能 */}
+              <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                <button
+                  onClick={() => handleLike(r.dish)}
+                  disabled={likingDish === r.dish}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm transition-all duration-200 ${
+                    userLikes[r.dish] 
+                      ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' 
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  } ${likingDish === r.dish ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  <span className={`text-lg ${userLikes[r.dish] ? '👍' : '👍'}`} 
+                        style={{ filter: userLikes[r.dish] ? 'none' : 'grayscale(100%)' }}>
+                    👍
+                  </span>
+                  <span className="font-medium">
+                    {likeStats[r.dish] || 0}
+                  </span>
+                </button>
+              </div>
             </div>
           ))}
           {recs.length === 0 && (

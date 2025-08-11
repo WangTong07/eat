@@ -134,8 +134,22 @@ export default function OverviewCards() {
 
   return (
     <>
+      <div className="relative mb-8">
+        <img 
+          src="https://images.unsplash.com/photo-1543352632-5a4b24e4d2a6?ixlib=rb-4.0.3&q=85&fm=jpg&crop=entropy&cs=srgb"
+          alt="美食装饰图片" 
+          className="w-full h-48 object-cover rounded-lg shadow-md"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/50 to-transparent flex items-center">
+          <div className="text-white px-6">
+            <h2 className="text-3xl font-bold">首页总览</h2>
+            <p className="text-white/80">{rangeText(baseDate)}</p>
+          </div>
+        </div>
+      </div>
+      
       <div className="flex items-center justify-between mb-3">
-        <div className="text-muted">{rangeText(baseDate)}</div>
+        <div className="text-muted">当前周期</div>
         <div className="flex items-center gap-2">
           <label className="text-sm text-muted">选择日期</label>
           <input

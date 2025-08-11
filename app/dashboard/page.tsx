@@ -11,7 +11,7 @@ export default function DashboardPage() {
       <div id="dashboard" className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
-            <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800">首页总览</h2>
+            <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800"></h2>
           </div>
         </div>
         <OverviewCards />

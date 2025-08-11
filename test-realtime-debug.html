@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>实时订阅测试</title>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>实时订阅测试</h1>
+    <div id="logs"></div>
+    
+    <script>
+        const supabaseUrl = 'https://sirxaxuvtvtpeozqjzur.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpcnhheHV2dHZ0cGVvenFqenVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI2NzQ3OTksImV4cCI6MjA2ODI1MDc5OX0.6-rO17rkd27J_uqHCT2uhmzgH0LoJv6rcri-vvEhvpM';
+        
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+        
+        const logsDiv = document.getElementById('logs');
+        
+        function addLog(message) {
+            const p = document.createElement('p');
+            p.textContent = new Date().toLocaleTimeString() + ': ' + message;
+            logsDiv.appendChild(p);
+            console.log(message);
+        }
+        
+        addLog('开始监听 menu_wishes 表变化...');
+        
+        // 监听 menu_wishes 表
+        const channel = supabase
+            .channel('realtime:menu_wishes')
+            .on(
+                'postgres_changes',
+                { 
+                    event: '*', 
+                    schema: 'public', 
+                    table: 'menu_wishes' 
+                },
+                (payload) => {
+                    addLog('检测到 menu_wishes 表变化: ' + JSON.stringify(payload));
+                    
+                    if (payload.eventType === 'INSERT' && payload.new?.request_type === '想吃的菜') {
+                        addLog('新的菜品心愿: ' + payload.new.content);
+                    }
+                }
+            )
+            .subscribe((status) => {
+                addLog('订阅状态: ' + status);
+            });
+        
+        // 监听 shopping_list 表
+        const shoppingChannel = supabase
+            .channel('realtime:shopping_list')
+            .on(
+                'postgres_changes',
+                { 
+                    event: '*', 
+                    schema: 'public', 
+                    table: 'shopping_list' 
+                },
+                (payload) => {
+                    addLog('检测到 shopping_list 表变化: ' + JSON.stringify(payload));
+                }
+            )
+            .subscribe((status) => {
+                addLog('购物清单订阅状态: ' + status);
+            });
+    </script>
+</body>
+</html>

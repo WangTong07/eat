@@ -1,20 +1,20 @@
 {
-  "path": "c:\\Users\\JYQ\\Desktop\\eat\\.next",
-  "desc": "值班人员安排系统 - Next.js构建产物，包含人员管理、财务管理、实时数据同步等功能",
-  "id": "d03bbbe04fa544299ec38fe80e4637f2",
+  "path": "c:\\Users\\JYQ\\Desktop\\eat",
+  "desc": "这是一个智能伙食管理系统，包含首页总览、成员管理、财务统计、值班安排等功能，使用Next.js + Supabase开发",
+  "id": "08b3ae11cb72453f9b5da459ff5da08f",
   "data": {
-    "spaceKey": "d03bbbe04fa544299ec38fe80e4637f2",
+    "spaceKey": "08b3ae11cb72453f9b5da459ff5da08f",
     "connections": {
-      "webIDE": "https://d03bbbe04fa544299ec38fe80e4637f2.ap-singapore.cloudstudio.club",
-      "preview": "https://d03bbbe04fa544299ec38fe80e4637f2--{port}.ap-singapore.cloudstudio.club",
-      "api": "https://d03bbbe04fa544299ec38fe80e4637f2--api.ap-singapore.cloudstudio.club",
-      "pty": "https://d03bbbe04fa544299ec38fe80e4637f2--pty.ap-singapore.cloudstudio.club"
+      "webIDE": "https://08b3ae11cb72453f9b5da459ff5da08f.ap-singapore.cloudstudio.club",
+      "preview": "https://08b3ae11cb72453f9b5da459ff5da08f--{port}.ap-singapore.cloudstudio.club",
+      "api": "https://08b3ae11cb72453f9b5da459ff5da08f--api.ap-singapore.cloudstudio.club",
+      "pty": "https://08b3ae11cb72453f9b5da459ff5da08f--pty.ap-singapore.cloudstudio.club"
     }
   },
   "config": {
-    "api": "https://d03bbbe04fa544299ec38fe80e4637f2--api.ap-singapore.cloudstudio.club",
-    "pty": "https://d03bbbe04fa544299ec38fe80e4637f2--pty.ap-singapore.cloudstudio.club",
+    "api": "https://08b3ae11cb72453f9b5da459ff5da08f--api.ap-singapore.cloudstudio.club",
+    "pty": "https://08b3ae11cb72453f9b5da459ff5da08f--pty.ap-singapore.cloudstudio.club",
     "region": "ap-shanghai",
-    "spaceKey": "d03bbbe04fa544299ec38fe80e4637f2"
+    "spaceKey": "08b3ae11cb72453f9b5da459ff5da08f"
   }
 }

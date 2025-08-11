@@ -1,147 +1,109 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { getSupabaseClient } from '@/lib/supabaseClient';
-import { useRealtimeSubscription } from '@/lib/useRealtimeSubscription';
 
 export default function TestRealtimePage() {
-  const [assignments, setAssignments] = useState<any[]>([]);
-  const [lastUpdate, setLastUpdate] = useState<string>('');
+  const [logs, setLogs] = useState<string[]>([]);
 
-  const loadAssignments = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('duty_staff_assignments')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      
-      setAssignments(data || []);
-      setLastUpdate(new Date().toLocaleTimeString());
-      console.log('✅ 数据已重新加载:', data?.length, '条记录');
-    } catch (error) {
-      console.error('❌ 加载失败:', error);
-    }
+  const addLog = (message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logMessage = `${timestamp}: ${message}`;
+    setLogs(prev => [...prev, logMessage]);
+    console.log(logMessage);
   };
 
   useEffect(() => {
-    loadAssignments();
+    const supabase = getSupabaseClient();
+    
+    addLog('开始监听 menu_wishes 表变化...');
+    
+    // 监听 menu_wishes 表
+    const menuChannel = supabase
+      .channel('realtime:menu_wishes')
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'menu_wishes' 
+        },
+        (payload) => {
+          addLog('检测到 menu_wishes 表变化: ' + JSON.stringify(payload, null, 2));
+          
+          if (payload.eventType === 'INSERT' && payload.new?.request_type === '想吃的菜') {
+            addLog('🍽️ 新的菜品心愿: ' + payload.new.content);
+          }
+        }
+      )
+      .subscribe((status) => {
+        addLog('menu_wishes 订阅状态: ' + status);
+      });
+    
+    // 监听 shopping_list 表
+    const shoppingChannel = supabase
+      .channel('realtime:shopping_list')
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'shopping_list' 
+        },
+        (payload) => {
+          addLog('检测到 shopping_list 表变化: ' + JSON.stringify(payload, null, 2));
+          
+          if (payload.eventType === 'INSERT') {
+            addLog('🛒 新增购物项: ' + payload.new?.name);
+          }
+        }
+      )
+      .subscribe((status) => {
+        addLog('shopping_list 订阅状态: ' + status);
+      });
+
+    return () => {
+      addLog('清理订阅...');
+      supabase.removeChannel(menuChannel);
+      supabase.removeChannel(shoppingChannel);
+    };
   }, []);
 
-  // 实时订阅测试
-  useRealtimeSubscription({
-    table: 'duty_staff_assignments',
-    onChange: () => {
-      console.log('🔄 [TestRealtime] 检测到 duty_staff_assignments 变更');
-      loadAssignments();
-    }
-  });
-
-  const testInsert = async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { error } = await supabase
-        .from('duty_staff_assignments')
-        .insert({
-          member_id: 'test-' + Date.now(),
-          year: 2025,
-          month: 8,
-          week_in_month: 1
-        });
-      
-      if (error) throw error;
-      console.log('✅ 测试插入成功');
-    } catch (error) {
-      console.error('❌ 测试插入失败:', error);
-    }
-  };
-
-  const testDelete = async () => {
-    if (assignments.length === 0) return;
-    
-    try {
-      const supabase = getSupabaseClient();
-      const lastRecord = assignments[0];
-      const { error } = await supabase
-        .from('duty_staff_assignments')
-        .delete()
-        .eq('id', lastRecord.id);
-      
-      if (error) throw error;
-      console.log('✅ 测试删除成功');
-    } catch (error) {
-      console.error('❌ 测试删除失败:', error);
-    }
-  };
-
   return (
-    <div className="p-6">
+    <div className="container mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">实时订阅测试</h1>
       
-      <div className="mb-4 space-x-2">
-        <button 
-          onClick={testInsert}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          测试插入
-        </button>
-        <button 
-          onClick={testDelete}
-          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-        >
-          测试删除
-        </button>
-        <button 
-          onClick={loadAssignments}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-        >
-          手动刷新
-        </button>
+      <div className="bg-gray-100 p-4 rounded-lg">
+        <h2 className="text-lg font-semibold mb-2">测试步骤：</h2>
+        <ol className="list-decimal list-inside space-y-1 text-sm">
+          <li>保持此页面打开</li>
+          <li>在新标签页中打开 <a href="/preferences" className="text-blue-600 underline">偏好提交页面</a></li>
+          <li>提交一个新的菜品心愿（如"芒果"）</li>
+          <li>回到此页面查看是否有日志输出</li>
+          <li>然后打开 <a href="/shopping" className="text-blue-600 underline">购物清单页面</a> 查看是否自动添加了食材</li>
+        </ol>
       </div>
 
-      <div className="mb-4">
-        <p><strong>最后更新时间:</strong> {lastUpdate}</p>
-        <p><strong>记录数量:</strong> {assignments.length}</p>
+      <div className="mt-6">
+        <h2 className="text-lg font-semibold mb-2">实时日志：</h2>
+        <div className="bg-black text-green-400 p-4 rounded-lg h-96 overflow-y-auto font-mono text-sm">
+          {logs.map((log, index) => (
+            <div key={index} className="mb-1">
+              {log}
+            </div>
+          ))}
+          {logs.length === 0 && (
+            <div className="text-gray-500">等待日志输出...</div>
+          )}
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-300">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="border border-gray-300 px-4 py-2">ID</th>
-              <th className="border border-gray-300 px-4 py-2">Member ID</th>
-              <th className="border border-gray-300 px-4 py-2">Year</th>
-              <th className="border border-gray-300 px-4 py-2">Month</th>
-              <th className="border border-gray-300 px-4 py-2">Week</th>
-              <th className="border border-gray-300 px-4 py-2">Created At</th>
-            </tr>
-          </thead>
-          <tbody>
-            {assignments.map((assignment, index) => (
-              <tr key={assignment.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                <td className="border border-gray-300 px-4 py-2">{assignment.id}</td>
-                <td className="border border-gray-300 px-4 py-2">{assignment.member_id}</td>
-                <td className="border border-gray-300 px-4 py-2">{assignment.year}</td>
-                <td className="border border-gray-300 px-4 py-2">{assignment.month}</td>
-                <td className="border border-gray-300 px-4 py-2">{assignment.week_in_month}</td>
-                <td className="border border-gray-300 px-4 py-2">
-                  {new Date(assignment.created_at).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded">
-        <h3 className="font-bold text-yellow-800">测试说明:</h3>
-        <ul className="list-disc list-inside text-yellow-700 mt-2">
-          <li>点击"测试插入"按钮，观察表格是否自动更新（不需要手动刷新）</li>
-          <li>点击"测试删除"按钮，观察最新记录是否自动消失</li>
-          <li>打开浏览器开发者工具查看控制台日志</li>
-          <li>如果实时订阅正常工作，应该能看到 "[TestRealtime] 检测到 duty_staff_assignments 变更" 日志</li>
-        </ul>
+      <div className="mt-4">
+        <button 
+          onClick={() => setLogs([])}
+          className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
+        >
+          清空日志
+        </button>
       </div>
     </div>
   );

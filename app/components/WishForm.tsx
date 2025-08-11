@@ -88,28 +88,31 @@ export default function WishForm() {
       {message && <div className="mt-2 text-sm text-gray-700">{message}</div>}
 
       <div className="mt-6">
-        <h3 className="font-bold mb-2">心愿池</h3>
-        <div className="ui-card rounded-xl p-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold">心愿池</h3>
+        </div>
+        <div className="mt-2">
           {pool.length === 0 ? (
-            <div className="text-sm text-gray-500">暂无心愿</div>
+            <div className="text-sm text-neutral-500">暂无心愿</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {pool.map((w, idx)=> {
-                const palettes = [
-                  { bg: 'bg-blue-50', border: 'border-blue-200' },
-                  { bg: 'bg-emerald-50', border: 'border-emerald-200' },
-                  { bg: 'bg-amber-50', border: 'border-amber-200' },
-                  { bg: 'bg-purple-50', border: 'border-purple-200' },
-                  { bg: 'bg-rose-50', border: 'border-rose-200' },
-                ];
-                const c = palettes[idx % palettes.length];
                 return (
-                  <div key={w.id} className={`rounded-xl p-4 border card-hover ${c.bg} ${c.border}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-sm"><span className="font-semibold mr-2">{w.user_name}</span><span className="badge badge-muted">{w.request_type}</span></div>
+                  <div key={w.id} className="ui-card rounded-xl p-5 card-hover animate-slide-up relative" style={{ animationDelay: `${0.1 * (idx + 1)}s` }}>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-bold text-heading">{w.content}</h3>
+                      <span className="badge badge-primary">{w.request_type}</span>
+                    </div>
+                    <div className="text-sm text-muted mb-2">提交人</div>
+                    <div className="flex items-center mb-4">
+                      <i className="fa fa-user text-primary mr-2" />
+                      <span>{w.user_name}</span>
+                    </div>
+                    
+                    {/* 删除按钮 */}
+                    <div className="absolute bottom-3 right-3">
                       <button
-                        className="btn-link"
-                        title="删除"
+                        className="flex items-center gap-1 px-3 py-1.5 rounded border border-red-500 text-red-600 hover:bg-red-50 active:scale-95 transition select-none"
                         onClick={async()=>{
                           const supabase = getSupabaseClient();
                           await supabase.from('menu_wishes').delete().eq('id', w.id);
@@ -120,10 +123,14 @@ export default function WishForm() {
                             .limit(100);
                           setPool(data || []);
                         }}
-                      >删除</button>
+                      >
+                        删除
+                      </button>
                     </div>
-                    <div className="text-sm whitespace-pre-wrap">{w.content}</div>
-                    <div className="text-xs text-gray-500 mt-2">{new Date(w.created_at || '').toLocaleString()}</div>
+                    
+                    <div className="text-xs text-gray-500 mt-2 absolute bottom-3 left-5">
+                      {new Date(w.created_at || '').toLocaleString()}
+                    </div>
                   </div>
                 );
               })}

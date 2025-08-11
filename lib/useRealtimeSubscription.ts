@@ -3,10 +3,10 @@ import { getSupabaseClient } from './supabaseClient';
 
 type RealtimeConfig = {
   table: string;
-  onUpdate?: () => void;
-  onInsert?: () => void;
-  onDelete?: () => void;
-  onChange?: () => void; // 任何变更都触发
+  onUpdate?: (payload?: any) => void;
+  onInsert?: (payload?: any) => void;
+  onDelete?: (payload?: any) => void;
+  onChange?: (payload?: any) => void; // 任何变更都触发
 };
 
 /**
@@ -34,18 +34,18 @@ export function useRealtimeSubscription(config: RealtimeConfig) {
           // 根据事件类型调用对应回调
           switch (payload.eventType) {
             case 'INSERT':
-              onInsert?.();
+              onInsert?.(payload);
               break;
             case 'UPDATE':
-              onUpdate?.();
+              onUpdate?.(payload);
               break;
             case 'DELETE':
-              onDelete?.();
+              onDelete?.(payload);
               break;
           }
           
           // 通用变更回调
-          onChange?.();
+          onChange?.(payload);
         }
       )
       .subscribe((status) => {

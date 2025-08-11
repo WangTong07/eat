@@ -300,7 +300,18 @@ export default function PeoplePage() {
 
   return (
     <Shell>
-      <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-bold text-neutral-800 mb-4">成员详情</h2>
+      <div className="relative mb-8">
+        <img 
+          src="https://cdn.pixabay.com/photo/2016/11/23/13/45/celebration-1852926_1280.jpg"
+          alt="成员详情装饰图片" 
+          className="w-full h-48 object-cover rounded-lg shadow-md"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/50 to-transparent flex items-center">
+          <div className="text-white px-6">
+            <h2 className="text-3xl font-bold">成员详情</h2>
+          </div>
+        </div>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="ui-card rounded-xl p-5 lg:col-span-3">
           <div className="flex items-center justify-between mb-3">
