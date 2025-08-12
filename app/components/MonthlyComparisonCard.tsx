@@ -33,7 +33,7 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
 
   const monthOptions = generateMonthOptions();
 
-  // 获取选中月份周围的6个月数据（选中月份前后各3个月）
+  // 获取选中月份周围的6个月数据（优化版：单次查询）
   useEffect(() => {
     const fetchMonthlyData = async () => {
       try {
@@ -51,50 +51,95 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
           months.push(monthStr);
         }
 
-        // 获取每个月的支出数据
-        const monthlyAmounts: MonthlyData[] = [];
+        // 计算查询范围
+        const firstMonth = months[0];
+        const lastMonth = months[months.length - 1];
+        const [firstYear, firstMonthNum] = firstMonth.split('-').map(v => parseInt(v));
+        const [lastYear, lastMonthNum] = lastMonth.split('-').map(v => parseInt(v));
         
-        for (const month of months) {
-          const [year, monthNum] = month.split('-').map(v => parseInt(v));
-          const startDate = `${year}-${String(monthNum).padStart(2, '0')}-01`;
-          const endDate = new Date(year, monthNum, 0).toISOString().slice(0, 10);
+        const startDate = `${firstYear}-${String(firstMonthNum).padStart(2, '0')}-01`;
+        const endDate = new Date(lastYear, lastMonthNum, 0).toISOString().slice(0, 10);
+
+        // 单次查询获取所有数据，然后按月分组
+        const { data, error } = await supabase
+          .from('expenses')
+          .select('amount, date')
+          .gte('date', startDate)
+          .lte('date', endDate);
+        
+        if (error) throw error;
+
+        // 按月分组数据
+        const monthlyMap = new Map<string, number>();
+        
+        // 初始化所有月份为0
+        months.forEach(month => {
+          monthlyMap.set(month, 0);
+        });
+
+        // 聚合数据
+        (data || []).forEach(expense => {
+          const expenseDate = new Date(expense.date);
+          const monthKey = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`;
+          const amount = Number(expense.amount) || 0;
           
-          try {
-            const { data, error } = await supabase
-              .from('expenses')
-              .select('amount')
-              .gte('date', startDate)
-              .lte('date', endDate);
-            
-            if (error) throw error;
-            
-            const totalAmount = (data || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
-            
-            monthlyAmounts.push({
-              month,
-              amount: totalAmount,
-              displayName: `${monthNum}月`
-            });
-          } catch (error) {
-            console.error(`获取${month}数据失败:`, error);
-            monthlyAmounts.push({
-              month,
-              amount: 0,
-              displayName: `${monthNum}月`
-            });
+          if (monthlyMap.has(monthKey)) {
+            monthlyMap.set(monthKey, monthlyMap.get(monthKey)! + amount);
           }
-        }
+        });
+
+        // 转换为数组格式
+        const monthlyAmounts: MonthlyData[] = months.map(month => {
+          const [year, monthNum] = month.split('-').map(v => parseInt(v));
+          return {
+            month,
+            amount: monthlyMap.get(month) || 0,
+            displayName: `${monthNum}月`
+          };
+        });
 
         setMonthlyData(monthlyAmounts);
       } catch (error) {
         console.error('获取月度对比数据失败:', error);
-        setMonthlyData([]);
+        // 设置默认数据，避免一直加载
+        const selectedDate = new Date(selectedMonth + '-01');
+        const fallbackData: MonthlyData[] = [];
+        
+        for (let i = 5; i >= 0; i--) {
+          const date = new Date(selectedDate);
+          date.setMonth(date.getMonth() - i);
+          const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          const [year, monthNum] = monthStr.split('-').map(v => parseInt(v));
+          
+          fallbackData.push({
+            month: monthStr,
+            amount: 0,
+            displayName: `${monthNum}月`
+          });
+        }
+        
+        setMonthlyData(fallbackData);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchMonthlyData();
+    // 添加超时处理
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('月度数据查询超时，使用默认数据');
+        setLoading(false);
+        setMonthlyData([]);
+      }
+    }, 5000); // 5秒超时
+
+    fetchMonthlyData().finally(() => {
+      clearTimeout(timeoutId);
+    });
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [selectedMonth]);
 
   // 计算统计数据
