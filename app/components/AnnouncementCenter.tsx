@@ -50,7 +50,7 @@ export default function AnnouncementCenter() {
 
   // 自动滚动逻辑
   useEffect(() => {
-    if (announcements.length <= 2 || isPaused || isManualScrolling) {
+    if (announcements.length <= 1 || isPaused || isManualScrolling) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -60,7 +60,7 @@ export default function AnnouncementCenter() {
 
     intervalRef.current = setInterval(() => {
       setCurrentIndex(prev => {
-        const maxIndex = Math.max(0, announcements.length - 2);
+        const maxIndex = Math.max(0, announcements.length - 1);
         return prev >= maxIndex ? 0 : prev + 1;
       });
     }, 2000); // 2秒切换一次
@@ -378,9 +378,9 @@ export default function AnnouncementCenter() {
           </button>
           
           {/* 指示器 */}
-          {announcements.length > 2 && (
+          {announcements.length > 1 && (
             <div className="flex space-x-1">
-              {Array.from({ length: Math.max(1, announcements.length - 1) }).map((_, index) => (
+              {Array.from({ length: announcements.length }).map((_, index) => (
                 <div
                   key={index}
                   className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
@@ -459,7 +459,7 @@ export default function AnnouncementCenter() {
       <div className="relative">
         <div 
           ref={scrollContainerRef}
-          className="max-h-48 overflow-y-auto announcement-scrollbar pr-2"
+          className="max-h-20 overflow-y-auto announcement-scrollbar pr-2"
           onScroll={handleScroll}
           style={{
             scrollbarWidth: 'thin',
@@ -467,7 +467,7 @@ export default function AnnouncementCenter() {
           }}
         >
           <div className="space-y-3">
-            {announcements.map((announcement, index) => (
+            {displayedAnnouncements.map((announcement, index) => (
               <div 
                 key={announcement.id}
                 className="bg-gray-800/40 backdrop-blur-sm rounded-lg p-3 border-l-4 border-amber-500 group hover:bg-gray-800/60 transition-all duration-200"
@@ -585,7 +585,7 @@ export default function AnnouncementCenter() {
         {isManualScrolling && (
           <span className="text-xs text-blue-400/70">📜 手动滚动中</span>
         )}
-        {!isPaused && !isManualScrolling && announcements.length > 2 && (
+        {!isPaused && !isManualScrolling && announcements.length > 1 && (
           <span className="text-xs text-green-400/70">▶️ 自动播放中</span>
         )}
       </div>
