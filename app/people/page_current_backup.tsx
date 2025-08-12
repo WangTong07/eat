@@ -325,27 +325,21 @@ export default function PeoplePage() {
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gradient-to-br from-blue-900/30 via-purple-900/30 to-indigo-900/30 border border-purple-700/30 shadow-xl hover:shadow-2xl transition-all duration-300 rounded-xl p-6 backdrop-blur-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
+        <div className="ui-card rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold">
               成员列表
-              {syncing && <span className="ml-2 text-sm text-blue-300">🔄 同步中...</span>}
+              {syncing && <span className="ml-2 text-sm text-blue-600">🔄 同步中...</span>}
             </h3>
-            <div className="text-purple-400/70 font-medium flex items-center gap-2">
+            <div className="text-sm text-muted flex items-center gap-2">
               <span>总人数</span>
-              <span className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 px-2 py-1 rounded-full text-sm font-semibold" aria-label="总人数">{members.length}</span>
+              <span className="badge badge-primary" aria-label="总人数">{members.length}</span>
             </div>
           </div>
-          <div className="space-y-2 max-h-96 overflow-auto pr-2">
+          <div className="space-y-1 max-h-80 overflow-auto pr-2">
             {members.map(m => (
-              <div key={m.id} className="grid grid-cols-4 items-center text-sm py-2 border-b border-purple-700/20 last:border-b-0">
-                <div className="truncate col-span-2 text-purple-100 font-medium flex items-center gap-2">
-                  {/* 头像 */}
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold shadow-md">
-                    {m.name.charAt(0)}
-                  </div>
-                  <span>{m.name}</span>
-                </div>
+              <div key={m.id} className="grid grid-cols-4 items-center text-sm py-1.5 border-b last:border-b-0">
+                <div className="truncate col-span-2">{m.name}</div>
                 <div className="text-right col-span-2">
                   <div className="flex items-center justify-end gap-2">
                     <button
@@ -552,27 +546,27 @@ export default function PeoplePage() {
                 </div>
               </div>
             ))}
-            {members.length === 0 && <div className="text-purple-400/70 text-sm">暂无成员</div>}
+            {members.length === 0 && <div className="text-muted text-sm">暂无成员</div>}
           </div>
-          <div className="mt-8 bg-gradient-to-br from-blue-800/20 via-purple-800/20 to-indigo-800/20 border border-purple-600/30 rounded-lg p-4 backdrop-blur-sm">
+          <div className="mt-4 ui-card rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
             <div className="flex items-center justify-between mb-3">
-              <h4 className="font-bold text-purple-200 flex items-center gap-2">
+              <h4 className="font-bold text-heading flex items-center gap-2">
                 <span>👤</span>
                 <span>添加新成员</span>
               </h4>
-              <span className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 px-2 py-1 rounded-full text-xs font-semibold">新增</span>
+              <span className="badge badge-secondary">新增</span>
             </div>
             <div className="flex items-center gap-3">
               <input 
                 value={newName} 
                 onChange={e=>setNewName(e.target.value)} 
                 placeholder="请输入成员姓名..." 
-                className="flex-1 bg-gradient-to-r from-blue-800/30 to-purple-800/30 border border-purple-600/30 rounded-lg px-4 py-2 text-purple-100 placeholder-purple-400/70 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all duration-200" 
+                className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
                 onKeyPress={e => e.key === 'Enter' && newName.trim() && document.getElementById('add-member-btn')?.click()}
               />
               <button 
                 id="add-member-btn"
-                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm bg-gradient-to-r from-blue-500 via-purple-500 to-indigo-600 hover:from-blue-600 hover:via-purple-600 hover:to-indigo-700 text-white cursor-pointer transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95" 
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm bg-blue-500 text-white hover:bg-blue-600 cursor-pointer transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed" 
                 disabled={!newName.trim() || syncing}
                 onClick={async()=>{
                   if (!newName.trim()) return;
@@ -614,12 +608,12 @@ export default function PeoplePage() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-900/30 via-purple-900/30 to-indigo-900/30 border border-purple-700/30 shadow-xl hover:shadow-2xl transition-all duration-300 rounded-xl p-6 backdrop-blur-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">值班人员</h3>
+        <div className="ui-card rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-heading">值班人员</h3>
             <div className="flex items-center gap-2 text-sm">
               <button 
-                className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 hover:from-blue-500/30 hover:to-purple-500/30 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md backdrop-blur-sm border border-purple-500/30" 
+                className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-600 hover:bg-purple-200 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md" 
                 onClick={() => {
                   // 限制：不允许回到2025年8月之前
                   if (assignYear === 2025 && assignMonth === 8) {
@@ -637,9 +631,9 @@ export default function PeoplePage() {
               >
                 <span>⬅️</span>
               </button>
-              <span className="font-bold text-lg bg-gradient-to-r from-blue-300 via-purple-300 to-indigo-300 bg-clip-text text-transparent">{assignYear}年{assignMonth}月</span>
+              <span className="font-bold text-lg text-blue-600">{assignYear}年{assignMonth}月</span>
               <button 
-                className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 hover:from-blue-500/30 hover:to-purple-500/30 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md backdrop-blur-sm border border-purple-500/30" 
+                className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-600 hover:bg-purple-200 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md" 
                 onClick={() => {
                   if (assignMonth === 12) {
                     setAssignYear(assignYear + 1);
@@ -653,7 +647,7 @@ export default function PeoplePage() {
               </button>
             </div>
             <button 
-              className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-indigo-500/20 text-purple-300 hover:from-blue-500/30 hover:via-purple-500/30 hover:to-indigo-500/30 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md backdrop-blur-sm border border-purple-500/30" 
+              className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-indigo-100 text-indigo-600 hover:bg-indigo-200 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md" 
               onClick={async()=>{
               // 计算上个月
               const prevMonth = assignMonth === 1 ? 12 : assignMonth - 1;
@@ -730,17 +724,17 @@ export default function PeoplePage() {
             </button>
           </div>
           <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-purple-700/20">
-            <thead className="bg-gradient-to-r from-blue-800/20 via-purple-800/20 to-indigo-800/20 backdrop-blur-sm">
+          <table className="min-w-full divide-y divide-neutral-200">
+            <thead className="bg-neutral-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-purple-300 uppercase tracking-wider">姓名</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-purple-300 uppercase tracking-wider">负责周次</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-purple-300 uppercase tracking-wider">操作</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">姓名</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-neutral-500 uppercase tracking-wider">负责周次</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-neutral-500 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
-            <tbody className="bg-gradient-to-br from-blue-900/10 via-purple-900/10 to-indigo-900/10 divide-y divide-purple-700/20 backdrop-blur-sm">
+            <tbody className="bg-white divide-y divide-neutral-200">
               {Object.keys(staffAssign).length === 0 && (
-                <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-purple-400/70">本月暂无值班人员</td></tr>
+                <tr><td colSpan={3} className="px-6 py-6 text-center text-sm text-muted">本月暂无值班人员</td></tr>
               )}
               {(() => {
                 const filteredMembers = members.filter(m => !!staffSet[m.id]);
@@ -799,14 +793,8 @@ export default function PeoplePage() {
                 
                 return sortedMembers;
               })().map(m => (
-                <tr key={`assign-${m.id}`} className="hover:bg-gradient-to-r hover:from-blue-800/10 hover:via-purple-800/10 hover:to-indigo-800/10 transition-colors duration-200">
-                  <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-purple-100 flex items-center gap-2">
-                    {/* 头像 */}
-                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                      {m.name.charAt(0)}
-                    </div>
-                    <span>{m.name}</span>
-                  </td>
+                <tr key={`assign-${m.id}`}>
+                  <td className="px-6 py-3 whitespace-nowrap text-sm font-medium text-neutral-900">{m.name}</td>
                   <td className="px-6 py-3 whitespace-nowrap text-sm">
                     <select
                       value={staffAssign[m.id] ?? ''}
@@ -884,7 +872,7 @@ export default function PeoplePage() {
                           await reloadAssignments(assignYear, assignMonth);
                         }
                       }}
-                      className="bg-gradient-to-r from-blue-800/30 to-purple-800/30 border border-purple-600/30 rounded-lg px-3 py-2 text-purple-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all duration-200 font-semibold"
+                      className="select-interactive font-semibold"
                       style={getWeekStyle(Math.abs(staffAssign[m.id] || 0))}
                     >
                       <option value="">未分配</option>
@@ -910,7 +898,7 @@ export default function PeoplePage() {
                   <td className="px-6 py-3 whitespace-nowrap text-right text-sm">
                     <div className="flex justify-end">
                       <button 
-                        className="flex items-center gap-1 px-3 py-1.5 rounded text-sm min-w-[80px] bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 hover:from-blue-500/30 hover:to-purple-500/30 cursor-pointer transition-all duration-200 backdrop-blur-sm border border-purple-500/30" 
+                        className="flex items-center gap-1 px-3 py-1.5 rounded text-sm min-w-[80px] bg-gray-100 text-gray-700 hover:bg-gray-200 cursor-pointer transition-all duration-200" 
                         onClick={async()=>{
                           if (!confirm(`确定要清空"${m.name}"的时间分配吗？\n\n清空后该人员仍在值班列表中，但时间显示为"未分配"。`)) return;
                           
