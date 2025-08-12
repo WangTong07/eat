@@ -19,6 +19,7 @@ export default function AnnouncementCenter() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formContent, setFormContent] = useState('');
   const [formAuthor, setFormAuthor] = useState('');
+  const [customAuthor, setCustomAuthor] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -42,9 +43,14 @@ export default function AnnouncementCenter() {
     }
   };
 
+  // 智能滚动逻辑 - 2秒间隔，支持手动控制
+  const [isManualScrolling, setIsManualScrolling] = useState(false);
+  const [scrollTimeout, setScrollTimeout] = useState<NodeJS.Timeout | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   // 自动滚动逻辑
   useEffect(() => {
-    if (announcements.length <= 2 || isPaused) {
+    if (announcements.length <= 2 || isPaused || isManualScrolling) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -57,14 +63,40 @@ export default function AnnouncementCenter() {
         const maxIndex = Math.max(0, announcements.length - 2);
         return prev >= maxIndex ? 0 : prev + 1;
       });
-    }, 3500); // 3.5秒切换一次
+    }, 2000); // 2秒切换一次
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [announcements.length, isPaused]);
+  }, [announcements.length, isPaused, isManualScrolling]);
+
+  // 处理手动滚动
+  const handleScroll = () => {
+    setIsManualScrolling(true);
+    
+    // 清除之前的定时器
+    if (scrollTimeout) {
+      clearTimeout(scrollTimeout);
+    }
+    
+    // 设置新的定时器，1.5秒后恢复自动滚动
+    const newTimeout = setTimeout(() => {
+      setIsManualScrolling(false);
+    }, 1500);
+    
+    setScrollTimeout(newTimeout);
+  };
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+    };
+  }, [scrollTimeout]);
 
   const fetchAnnouncements = async () => {
     try {
@@ -114,7 +146,8 @@ export default function AnnouncementCenter() {
   };
 
   const handleEditAnnouncement = async (id: string) => {
-    if (!formContent.trim() || !formAuthor.trim() || isSubmitting) return;
+    const finalAuthor = formAuthor === 'custom' ? customAuthor.trim() : formAuthor.trim();
+    if (!formContent.trim() || !finalAuthor || isSubmitting) return;
     
     setIsSubmitting(true);
     try {
@@ -124,7 +157,7 @@ export default function AnnouncementCenter() {
         body: JSON.stringify({ 
           id, 
           content: formContent.trim(), 
-          author: formAuthor.trim(),
+          author: finalAuthor,
           is_active: true 
         })
       });
@@ -132,6 +165,7 @@ export default function AnnouncementCenter() {
       if (res.ok) {
         setFormContent('');
         setFormAuthor('');
+        setCustomAuthor('');
         setEditingId(null);
         fetchAnnouncements();
       } else {
@@ -169,7 +203,14 @@ export default function AnnouncementCenter() {
   const startEdit = (announcement: Announcement) => {
     setEditingId(announcement.id);
     setFormContent(announcement.content);
-    setFormAuthor(announcement.author || '');
+    const author = announcement.author || '';
+    if (availableNames.includes(author)) {
+      setFormAuthor(author);
+      setCustomAuthor('');
+    } else {
+      setFormAuthor('custom');
+      setCustomAuthor(author);
+    }
     setShowAddForm(false);
   };
 
@@ -177,12 +218,14 @@ export default function AnnouncementCenter() {
     setEditingId(null);
     setFormContent('');
     setFormAuthor('');
+    setCustomAuthor('');
   };
 
   const cancelAdd = () => {
     setShowAddForm(false);
     setFormContent('');
     setFormAuthor('');
+    setCustomAuthor('');
   };
 
   if (isLoading) {
@@ -205,12 +248,93 @@ export default function AnnouncementCenter() {
   if (announcements.length === 0) {
     return (
       <div className="bg-gradient-to-br from-amber-900/30 to-orange-900/30 border border-amber-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-4 mb-6">
-        <div className="flex items-center space-x-2 mb-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md">
-            <span className="text-white text-lg">📢</span>
+        {/* 标题栏 - 包含发布按钮 */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-600 rounded-lg flex items-center justify-center shadow-md">
+              <span className="text-white text-sm">📢</span>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+                公告中心
+              </h2>
+              <p className="text-amber-400/70 font-medium text-xs">发布和管理系统公告</p>
+            </div>
           </div>
-          <h3 className="text-lg font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">公告中心</h3>
+          
+          <div className="flex items-center space-x-2">
+            {/* 发布按钮 */}
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="bg-green-900/40 text-green-400 border border-green-700/50 px-2 py-1 rounded-full text-xs font-semibold hover:bg-green-800/40 transition-all duration-200"
+            >
+              + 发布
+            </button>
+          </div>
         </div>
+
+        {/* 发布公告表单 */}
+        {showAddForm && (
+          <div className="mb-4 p-3 bg-gray-800/40 backdrop-blur-sm rounded-lg border border-amber-700/20">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-amber-400 text-sm font-medium">发布新公告</h4>
+              <button
+                onClick={cancelAdd}
+                className="text-amber-400/70 hover:text-amber-400 text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-2">
+              <div className="space-y-2">
+                <select
+                  value={formAuthor}
+                  onChange={(e) => setFormAuthor(e.target.value)}
+                  className="w-full p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
+                >
+                  <option value="">选择发布人...</option>
+                  {availableNames.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                  <option value="custom">手动输入...</option>
+                </select>
+                        {formAuthor === 'custom' && (
+                          <input
+                            type="text"
+                            value={customAuthor}
+                            onChange={(e) => setCustomAuthor(e.target.value)}
+                            placeholder="请输入发布人姓名..."
+                            className="w-full p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
+                            maxLength={50}
+                            autoFocus
+                          />
+                        )}
+              </div>
+              
+              <textarea
+                value={formContent}
+                onChange={(e) => setFormContent(e.target.value)}
+                placeholder="输入公告内容..."
+                className="w-full p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none resize-none"
+                rows={3}
+                maxLength={500}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-xs text-amber-400/70">{formContent.length}/500</span>
+              <button
+                onClick={handleAddAnnouncement}
+                disabled={!formContent.trim() || !(formAuthor === 'custom' ? customAuthor.trim() : formAuthor.trim()) || isSubmitting}
+                className="px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-xs rounded transition-all duration-200 shadow-md"
+              >
+                {isSubmitting ? '发布中...' : '📤 发布'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <p className="text-amber-400/70 text-sm text-center py-4">暂无公告</p>
       </div>
     );
@@ -282,11 +406,11 @@ export default function AnnouncementCenter() {
             </button>
           </div>
           <div className="space-y-2">
-            <div className="flex space-x-2">
+            <div className="space-y-2">
               <select
                 value={formAuthor}
                 onChange={(e) => setFormAuthor(e.target.value)}
-                className="flex-1 p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
+                className="w-full p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
               >
                 <option value="">选择发布人...</option>
                 {availableNames.map((name) => (
@@ -294,15 +418,19 @@ export default function AnnouncementCenter() {
                     {name}
                   </option>
                 ))}
+                <option value="custom">手动输入...</option>
               </select>
-              <input
-                type="text"
-                value={formAuthor}
-                onChange={(e) => setFormAuthor(e.target.value)}
-                placeholder="或手动输入..."
-                className="flex-1 p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
-                maxLength={50}
-              />
+                      {formAuthor === 'custom' && (
+                        <input
+                          type="text"
+                          value={customAuthor}
+                          onChange={(e) => setCustomAuthor(e.target.value)}
+                          placeholder="请输入发布人姓名..."
+                          className="w-full p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
+                          maxLength={50}
+                          autoFocus
+                        />
+                      )}
             </div>
             
             <textarea
@@ -318,7 +446,7 @@ export default function AnnouncementCenter() {
             <span className="text-xs text-amber-400/70">{formContent.length}/500</span>
             <button
               onClick={handleAddAnnouncement}
-              disabled={!formContent.trim() || !formAuthor.trim() || isSubmitting}
+              disabled={!formContent.trim() || !(formAuthor === 'custom' ? customAuthor.trim() : formAuthor.trim()) || isSubmitting}
               className="px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-xs rounded transition-all duration-200 shadow-md"
             >
               {isSubmitting ? '发布中...' : '📤 发布'}
@@ -327,28 +455,31 @@ export default function AnnouncementCenter() {
         </div>
       )}
 
-      {/* 公告内容区域 */}
-      <div className="relative overflow-hidden">
+      {/* 公告内容区域 - 支持手动滚动和透明滚动条 */}
+      <div className="relative">
         <div 
-          className="transition-transform duration-500 ease-in-out"
+          ref={scrollContainerRef}
+          className="max-h-48 overflow-y-auto announcement-scrollbar pr-2"
+          onScroll={handleScroll}
           style={{
-            transform: `translateY(0)`
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'rgba(75, 85, 99, 0.6) rgba(31, 41, 55, 0.6)'
           }}
         >
           <div className="space-y-3">
-            {displayedAnnouncements.map((announcement, index) => (
+            {announcements.map((announcement, index) => (
               <div 
-                key={`${announcement.id}-${currentIndex}-${index}`}
+                key={announcement.id}
                 className="bg-gray-800/40 backdrop-blur-sm rounded-lg p-3 border-l-4 border-amber-500 group hover:bg-gray-800/60 transition-all duration-200"
               >
                 {/* 编辑表单 */}
                 {editingId === announcement.id ? (
                   <div className="space-y-2">
-                    <div className="flex space-x-2">
+                    <div className="space-y-2">
                       <select
                         value={formAuthor}
                         onChange={(e) => setFormAuthor(e.target.value)}
-                        className="flex-1 p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
+                        className="w-full p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
                       >
                         <option value="">选择发布人...</option>
                         {availableNames.map((name) => (
@@ -356,15 +487,19 @@ export default function AnnouncementCenter() {
                             {name}
                           </option>
                         ))}
+                        <option value="custom">手动输入...</option>
                       </select>
-                      <input
-                        type="text"
-                        value={formAuthor}
-                        onChange={(e) => setFormAuthor(e.target.value)}
-                        placeholder="或手动输入..."
-                        className="flex-1 p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
-                        maxLength={50}
-                      />
+                      {formAuthor === 'custom' && (
+                        <input
+                          type="text"
+                          value={customAuthor}
+                          onChange={(e) => setCustomAuthor(e.target.value)}
+                          placeholder="请输入发布人姓名..."
+                          className="w-full p-2 bg-gray-800/50 text-gray-200 text-sm rounded border border-amber-700/30 focus:border-amber-600/50 focus:outline-none"
+                          maxLength={50}
+                          autoFocus
+                        />
+                      )}
                     </div>
                     
                     <textarea
@@ -385,7 +520,7 @@ export default function AnnouncementCenter() {
                         </button>
                         <button
                           onClick={() => handleEditAnnouncement(announcement.id)}
-                          disabled={!formContent.trim() || !formAuthor.trim() || isSubmitting}
+                          disabled={!formContent.trim() || !(formAuthor === 'custom' ? customAuthor.trim() : formAuthor.trim()) || isSubmitting}
                           className="px-2 py-1 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-xs rounded transition-all duration-200"
                         >
                           {isSubmitting ? '保存中...' : '💾 保存'}
@@ -442,12 +577,18 @@ export default function AnnouncementCenter() {
         </div>
       </div>
 
-      {/* 暂停提示 */}
-      {isPaused && announcements.length > 2 && (
-        <div className="text-center mt-2">
+      {/* 滚动状态提示 */}
+      <div className="text-center mt-2">
+        {isPaused && (
           <span className="text-xs text-amber-500/70">⏸️ 已暂停自动播放</span>
-        </div>
-      )}
+        )}
+        {isManualScrolling && (
+          <span className="text-xs text-blue-400/70">📜 手动滚动中</span>
+        )}
+        {!isPaused && !isManualScrolling && announcements.length > 2 && (
+          <span className="text-xs text-green-400/70">▶️ 自动播放中</span>
+        )}
+      </div>
     </div>
   );
 }
