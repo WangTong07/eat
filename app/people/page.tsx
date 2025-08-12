@@ -331,9 +331,15 @@ export default function PeoplePage() {
               成员列表
               {syncing && <span className="ml-2 text-sm text-blue-300">🔄 同步中...</span>}
             </h3>
-            <div className="text-purple-400/70 font-medium flex items-center gap-2">
-              <span>总人数</span>
-              <span className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 px-2 py-1 rounded-full text-sm font-semibold" aria-label="总人数">{members.length}</span>
+            <div className="text-purple-400/70 font-medium flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span>活跃人数</span>
+                <span className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 text-green-300 px-2 py-1 rounded-full text-sm font-semibold" aria-label="活跃人数">{members.filter(m => m.is_active).length}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span>总人数</span>
+                <span className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 px-2 py-1 rounded-full text-sm font-semibold" aria-label="总人数">{members.length}</span>
+              </div>
             </div>
           </div>
           <div className="space-y-2 max-h-96 overflow-auto pr-2">
