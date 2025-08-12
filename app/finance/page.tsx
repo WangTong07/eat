@@ -986,13 +986,14 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
                     </td>
                     <td className="px-4 py-2 text-center">
                       <button 
-                        className="bg-red-900/40 hover:bg-red-800/40 border border-red-700/50 text-red-400 px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 hover:shadow-sm" 
+                        className="inline-flex items-center gap-1 bg-red-900/40 hover:bg-red-800/40 border border-red-700/50 text-red-400 px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 hover:shadow-sm whitespace-nowrap" 
                         onClick={async()=>{ 
                           await fetch(`/api/members/pay?member_id=${m.id}&year=${year}&month=${month}`, { method:'DELETE' }); 
                           await reload(); 
                         }}
                       >
-                        清除
+                        <span>🗑️</span>
+                        <span>清除</span>
                       </button>
                     </td>
                   </tr>
