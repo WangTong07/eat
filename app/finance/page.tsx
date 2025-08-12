@@ -828,49 +828,52 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
     <div className="space-y-4">
       {/* 控制面板 - 深色主题设计 */}
       <div className="bg-gradient-to-r from-cyan-900/40 to-blue-900/40 rounded-lg p-4 border border-cyan-700/30">
-        <div className="flex items-center gap-4 mb-3">
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-cyan-400">📅 年份</label>
-            <input 
-              type="number" 
-              className="border-2 border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 w-24 focus:border-cyan-600/50 focus:ring-2 focus:ring-cyan-900/30 transition-all duration-200" 
-              value={year} 
-              onChange={e=>setYear(parseInt(e.target.value||`${new Date().getFullYear()}`))} 
-            />
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          {/* 左侧：年份月份和刷新按钮 */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-cyan-400">📅 年份</label>
+              <input 
+                type="number" 
+                className="border-2 border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 w-24 focus:border-cyan-600/50 focus:ring-2 focus:ring-cyan-900/30 transition-all duration-200" 
+                value={year} 
+                onChange={e=>setYear(parseInt(e.target.value||`${new Date().getFullYear()}`))} 
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-cyan-400">📅 月份</label>
+              <input 
+                type="number" 
+                className="border-2 border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 w-20 focus:border-cyan-600/50 focus:ring-2 focus:ring-cyan-900/30 transition-all duration-200" 
+                value={month} 
+                onChange={e=>setMonth(parseInt(e.target.value||`${new Date().getMonth()+1}`))} 
+              />
+            </div>
+            <button 
+              className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200" 
+              onClick={reload}
+            >
+              🔄 刷新
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-cyan-400">📅 月份</label>
-            <input 
-              type="number" 
-              className="border-2 border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 w-20 focus:border-cyan-600/50 focus:ring-2 focus:ring-cyan-900/30 transition-all duration-200" 
-              value={month} 
-              onChange={e=>setMonth(parseInt(e.target.value||`${new Date().getMonth()+1}`))} 
-            />
-          </div>
-          <button 
-            className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200" 
-            onClick={reload}
-          >
-            🔄 刷新
-          </button>
-        </div>
-        
-        {/* 统计信息 - 深色主题 */}
-        <div className="flex items-center gap-6 text-sm">
-          <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-cyan-700/30">
-            <span className="text-cyan-400">👥</span>
-            <span className="text-gray-300">总人数：</span>
-            <span className="font-bold text-gray-200">{totalCount}</span>
-          </div>
-          <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-green-700/30">
-            <span className="text-green-400">✅</span>
-            <span className="text-gray-300">已交：</span>
-            <span className="font-bold text-green-400">{paidCount}</span>
-          </div>
-          <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-red-700/30">
-            <span className="text-red-400">❌</span>
-            <span className="text-gray-300">未交：</span>
-            <span className="font-bold text-red-400">{unpaidCount}</span>
+          
+          {/* 右侧：统计信息 */}
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-cyan-700/30">
+              <span className="text-cyan-400">👥</span>
+              <span className="text-gray-300">总人数：</span>
+              <span className="font-bold text-gray-200">{totalCount}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-green-700/30">
+              <span className="text-green-400">✅</span>
+              <span className="text-gray-300">已交：</span>
+              <span className="font-bold text-green-400">{paidCount}</span>
+            </div>
+            <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-red-700/30">
+              <span className="text-red-400">❌</span>
+              <span className="text-gray-300">未交：</span>
+              <span className="font-bold text-red-400">{unpaidCount}</span>
+            </div>
           </div>
         </div>
       </div>
