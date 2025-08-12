@@ -1054,7 +1054,7 @@ export default function PeoplePage() {
                   <td className="px-6 py-3 whitespace-nowrap text-right text-sm">
                     <div className="flex justify-end">
                       <button 
-                        className="flex items-center gap-1 px-3 py-1.5 rounded text-sm min-w-[80px] bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 hover:from-blue-500/30 hover:to-purple-500/30 cursor-pointer transition-all duration-200 backdrop-blur-sm border border-purple-500/30" 
+                        className="flex items-center gap-1 px-3 py-1.5 rounded text-sm min-w-[80px] bg-gradient-to-r from-blue-500/20 to-purple-500/20 text-purple-300 hover:from-blue-500/30 hover:to-purple-500/30 cursor-pointer transition-all duration-200 backdrop-blur-sm border border-purple-500/30 whitespace-nowrap" 
                         onClick={async()=>{
                           if (!confirm(`确定要清空"${m.name}"的时间分配吗？\n\n清空后该人员仍在值班列表中，但时间显示为"未分配"。`)) return;
                           

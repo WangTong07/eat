@@ -300,7 +300,7 @@ export default function FinancePage(){
             <tbody className="divide-y divide-emerald-700/30">
               {weeklyView.length===0 && (
                 <tr>
-                  <td className="px-6 py-4 text-center text-gray-400" colSpan={2}>
+                  <td className="px-6 py-3 text-center text-gray-400" colSpan={2}>
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-2xl">📝</span>
                       <span>本月暂无支出</span>
@@ -310,8 +310,8 @@ export default function FinancePage(){
               )}
               {weeklyView.map((w, index)=> (
                 <tr key={w.week_number} className={`hover:bg-emerald-800/30 transition-colors duration-150 ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-emerald-800/20'}`}>
-                  <td className="px-6 py-4 font-medium text-gray-200">{isoWeekRangeLabel(w.week_number)}</td>
-                  <td className="px-6 py-4 text-right font-mono font-bold text-emerald-400">
+                  <td className="px-6 py-2 font-medium text-gray-200">{isoWeekRangeLabel(w.week_number)}</td>
+                  <td className="px-6 py-2 text-right font-mono font-bold text-emerald-400">
                     ¥{Number(w.amount_sum||0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
                   </td>
                 </tr>
@@ -423,7 +423,7 @@ export default function FinancePage(){
               <tbody className="divide-y divide-orange-700/30">
                 {items.length===0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-400" colSpan={5}>
+                    <td className="px-4 py-4 text-center text-gray-400" colSpan={5}>
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-2xl">📋</span>
                         <span className="text-sm">暂无支出记录</span>
@@ -433,8 +433,8 @@ export default function FinancePage(){
                 )}
                 {items.map((it, index)=> (
                   <tr key={it.id} className={`hover:bg-orange-800/30 transition-colors duration-150 ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-orange-800/20'}`}>
-                    <td className="px-4 py-3 font-medium text-gray-200 text-sm">{it.date}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2 font-medium text-gray-200 text-sm">{it.date}</td>
+                    <td className="px-4 py-2">
                       <div className="font-medium text-gray-200 text-sm">{(it as any).item_description || it.description}</div>
                       {(it as any).receipt_url && (
                         <div className="flex flex-wrap gap-1 mt-1">
@@ -469,16 +469,17 @@ export default function FinancePage(){
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-orange-400 text-sm">
+                    <td className="px-4 py-2 text-right font-mono font-bold text-orange-400 text-sm">
                       ¥{Number(it.amount||0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="px-4 py-3 font-medium text-gray-300 text-sm">{(it as any).user_name || it.handler || '-'}</td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-2 font-medium text-gray-300 text-sm">{(it as any).user_name || it.handler || '-'}</td>
+                    <td className="px-4 py-2 text-center">
                       <button
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/50 text-red-400 hover:bg-red-800/40 hover:border-red-600/50 active:scale-95 transition-all duration-200 font-medium shadow-sm hover:shadow-md text-xs"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/50 text-red-400 hover:bg-red-800/40 hover:border-red-600/50 active:scale-95 transition-all duration-200 font-medium shadow-sm hover:shadow-md text-xs whitespace-nowrap"
                         onClick={()=> onDelete(it)}
                       >
-                        🗑️ 删除
+                        <span>🗑️</span>
+                        <span>删除</span>
                       </button>
                     </td>
                   </tr>
@@ -671,8 +672,8 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
                 )}
                 {details.map((d,i)=> (
                   <tr key={i} className="border-b border-gray-700/30 last:border-b-0 hover:bg-gray-700/30 transition-colors duration-150">
-                    <td className="px-3 py-3 font-medium text-gray-200">{d.name}</td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-2 font-medium text-gray-200">{d.name}</td>
+                    <td className="px-3 py-2">
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
                         d.paid 
                           ? 'bg-green-900/40 text-green-400 border border-green-700/50' 
@@ -681,7 +682,7 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
                         {d.paid ? '✅ 已交' : '❌ 未交'}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-right font-mono font-semibold text-gray-200">
+                    <td className="px-3 py-2 text-right font-mono font-semibold text-gray-200">
                       {d.amount ? `¥${Number(d.amount).toLocaleString('zh-CN', { minimumFractionDigits: 0 })}` : '-'}
                     </td>
                   </tr>
@@ -892,8 +893,8 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
                 const rec = map[m.id] || {};
                 return (
                   <tr key={`pay-${m.id}`} className={`hover:bg-cyan-800/30 transition-colors duration-150 ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-cyan-800/20'}`}>
-                    <td className="px-4 py-3 font-medium text-gray-200">{m.name}</td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-2 font-medium text-gray-200">{m.name}</td>
+                    <td className="px-4 py-2 text-center">
                       <div className="inline-flex rounded-md border border-gray-600/50 overflow-hidden shadow-sm">
                         <button
                           className={`px-3 py-1 text-xs font-medium transition-all duration-200 ${
@@ -917,7 +918,7 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-2 text-center">
                       <input
                         type="number"
                         step="0.01"
@@ -937,7 +938,7 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
                         }}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2">
                       <div className="flex items-center gap-2 justify-center">
                         <select
                           className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 text-sm focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200"
@@ -983,7 +984,7 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-2 text-center">
                       <button 
                         className="bg-red-900/40 hover:bg-red-800/40 border border-red-700/50 text-red-400 px-3 py-1 rounded-md text-xs font-medium transition-all duration-200 hover:shadow-sm" 
                         onClick={async()=>{ 
