@@ -1,234 +1,237 @@
-"use client";
-import { useEffect, useState, useMemo } from "react";
-import { getSupabaseClient } from "@/lib/supabaseClient";
+'use client';
 
-type MonthlyData = {
-  month: string;
-  amount: number;
-  displayName: string;
-};
+import { useEffect, useState } from 'react';
 
 interface MonthlyComparisonCardProps {
-  currentMonth: string; // YYYY-MM format
+  currentMonth: string;
   currentAmount: number;
 }
 
 export default function MonthlyComparisonCard({ currentMonth, currentAmount }: MonthlyComparisonCardProps) {
-  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [monthlyData, setMonthlyData] = useState<Array<{ month: string; amount: number }>>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
 
-  // 获取最近6个月的数据
+  // 生成可选择的月份列表（最近12个月）
+  const generateMonthOptions = () => {
+    const options = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const displayStr = `${date.getFullYear()}年${date.getMonth() + 1}月`;
+      options.push({ value: monthStr, label: displayStr });
+    }
+    return options;
+  };
+
+  const monthOptions = generateMonthOptions();
+
+  // 获取月度数据
+  const fetchMonthlyData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/expenses');
+      if (!response.ok) throw new Error('Failed to fetch expenses');
+      
+      const expenses = await response.json();
+      
+      // 按月聚合数据
+      const monthlyMap = new Map<string, number>();
+      
+      expenses.forEach((expense: any) => {
+        const date = new Date(expense.created_at);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const amount = Number(expense.amount) || 0;
+        monthlyMap.set(monthKey, (monthlyMap.get(monthKey) || 0) + amount);
+      });
+
+      // 转换为数组并排序
+      const monthlyArray = Array.from(monthlyMap.entries())
+        .map(([month, amount]) => ({ month, amount }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+
+      setMonthlyData(monthlyArray);
+    } catch (error) {
+      console.error('Error fetching monthly data:', error);
+      setMonthlyData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchMonthlyData = async () => {
-      try {
-        setLoading(true);
-        const supabase = getSupabaseClient();
-        
-        // 生成最近6个月的月份列表
-        const months: string[] = [];
-        const currentDate = new Date(currentMonth + '-01');
-        
-        for (let i = 5; i >= 0; i--) {
-          const date = new Date(currentDate);
-          date.setMonth(date.getMonth() - i);
-          const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          months.push(monthStr);
-        }
-
-        // 获取每个月的支出数据
-        const monthlyAmounts: MonthlyData[] = [];
-        
-        for (const month of months) {
-          const [year, monthNum] = month.split('-').map(v => parseInt(v));
-          const startDate = `${year}-${String(monthNum).padStart(2, '0')}-01`;
-          const endDate = new Date(year, monthNum, 0).toISOString().slice(0, 10);
-          
-          try {
-            const { data, error } = await supabase
-              .from('expenses')
-              .select('amount')
-              .gte('date', startDate)
-              .lte('date', endDate);
-            
-            if (error) throw error;
-            
-            const totalAmount = (data || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
-            
-            monthlyAmounts.push({
-              month,
-              amount: totalAmount,
-              displayName: `${monthNum}月`
-            });
-          } catch (error) {
-            console.error(`获取${month}数据失败:`, error);
-            monthlyAmounts.push({
-              month,
-              amount: 0,
-              displayName: `${monthNum}月`
-            });
-          }
-        }
-
-        setMonthlyData(monthlyAmounts);
-      } catch (error) {
-        console.error('获取月度对比数据失败:', error);
-        setMonthlyData([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchMonthlyData();
-  }, [currentMonth]);
+  }, []);
 
-  // 计算统计数据
-  const stats = useMemo(() => {
-    if (monthlyData.length === 0) return null;
+  // 获取选中月份的数据
+  const getSelectedMonthData = () => {
+    const selectedData = monthlyData.find(item => item.month === selectedMonth);
+    return selectedData ? selectedData.amount : 0;
+  };
 
-    const amounts = monthlyData.map(d => d.amount);
-    const lastMonth = monthlyData[monthlyData.length - 2]; // 上个月
-    const currentMonthData = monthlyData[monthlyData.length - 1]; // 当前月
+  // 获取上个月的数据
+  const getPreviousMonthData = () => {
+    const selectedDate = new Date(selectedMonth + '-01');
+    const prevDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth() - 1, 1);
+    const prevMonthKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
     
-    // 更新当前月的实际金额
-    const updatedCurrentAmount = currentAmount;
-    const lastMonthAmount = lastMonth?.amount || 0;
+    const prevData = monthlyData.find(item => item.month === prevMonthKey);
+    return prevData ? prevData.amount : 0;
+  };
+
+  // 计算环比变化
+  const calculateChange = () => {
+    const currentAmount = getSelectedMonthData();
+    const previousAmount = getPreviousMonthData();
     
-    // 计算环比变化
-    const changeAmount = updatedCurrentAmount - lastMonthAmount;
-    const changePercent = lastMonthAmount > 0 ? (changeAmount / lastMonthAmount) * 100 : 0;
+    if (previousAmount === 0) return { percentage: 0, isIncrease: false };
     
-    // 计算最大值用于图表缩放
-    const maxAmount = Math.max(...amounts, updatedCurrentAmount);
-    
+    const change = ((currentAmount - previousAmount) / previousAmount) * 100;
     return {
-      lastMonthAmount,
-      changeAmount,
-      changePercent,
-      maxAmount,
-      isIncrease: changeAmount > 0,
-      isDecrease: changeAmount < 0
+      percentage: Math.abs(change),
+      isIncrease: change > 0
     };
-  }, [monthlyData, currentAmount]);
+  };
+
+  // 获取趋势数据（选中月份前后各3个月，共7个月）
+  const getTrendData = () => {
+    const selectedDate = new Date(selectedMonth + '-01');
+    const trendData = [];
+    
+    for (let i = -3; i <= 3; i++) {
+      const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + i, 1);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthData = monthlyData.find(item => item.month === monthKey);
+      
+      trendData.push({
+        month: monthKey,
+        amount: monthData ? monthData.amount : 0,
+        isSelected: monthKey === selectedMonth,
+        displayName: `${date.getMonth() + 1}月`
+      });
+    }
+    
+    return trendData;
+  };
+
+  const selectedAmount = getSelectedMonthData();
+  const previousAmount = getPreviousMonthData();
+  const change = calculateChange();
+  const trendData = getTrendData();
+  const maxAmount = Math.max(...trendData.map(d => d.amount), 1);
 
   if (loading) {
     return (
-      <div className="bg-gradient-to-br from-purple-900/30 via-pink-900/30 to-indigo-900/30 border border-purple-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            📈 月度花销对比
+      <div className="bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-6 h-6 bg-purple-500 rounded-lg flex items-center justify-center">
+            📈
           </div>
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md">
-            <span className="text-white text-lg animate-pulse">📊</span>
-          </div>
+          <h3 className="text-lg font-semibold">月度花销对比</h3>
         </div>
-        <div className="text-center py-8 text-gray-400">
-          <div className="animate-spin text-2xl mb-2">⏳</div>
-          <div>加载中...</div>
+        <div className="animate-pulse">
+          <div className="h-4 bg-purple-700 rounded mb-2"></div>
+          <div className="h-4 bg-purple-700 rounded w-3/4"></div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-gradient-to-br from-purple-900/30 via-pink-900/30 to-indigo-900/30 border border-purple-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6">
+    <div className="bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 rounded-xl p-6 text-white shadow-lg">
+      {/* 标题和月份选择器 */}
       <div className="flex items-center justify-between mb-4">
-        <div className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-          📈 月度花销对比
-        </div>
-        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md">
-          <span className="text-white text-lg">📊</span>
-        </div>
-      </div>
-
-      {/* 当前月与上月对比 */}
-      <div className="space-y-2 mb-4">
-        <div className="flex items-baseline gap-2">
-          <div className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            ¥{currentAmount.toLocaleString('zh-CN', { minimumFractionDigits: 0 })}
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 bg-purple-500 rounded-lg flex items-center justify-center">
+            📈
           </div>
-          <div className="text-lg text-gray-400 font-medium">
-            本月
-          </div>
+          <h3 className="text-lg font-semibold">月度花销对比</h3>
         </div>
         
-        {stats && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-400">上月: ¥{stats.lastMonthAmount.toLocaleString('zh-CN', { minimumFractionDigits: 0 })}</span>
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-              stats.isIncrease ? 'bg-red-900/40 text-red-400' : 
-              stats.isDecrease ? 'bg-green-900/40 text-green-400' : 
-              'bg-gray-800/40 text-gray-400'
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="bg-purple-700/50 border border-purple-600 rounded-lg px-3 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+        >
+          {monthOptions.map(option => (
+            <option key={option.value} value={option.value} className="bg-purple-800">
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* 金额对比 */}
+      <div className="mb-4">
+        <div className="text-3xl font-bold mb-2">¥{selectedAmount.toFixed(0)}</div>
+        <div className="flex items-center gap-4 text-sm">
+          <span className="text-purple-200">
+            上月: ¥{previousAmount.toFixed(0)}
+          </span>
+          {change.percentage > 0 && (
+            <span className={`flex items-center gap-1 ${
+              change.isIncrease ? 'text-red-400' : 'text-green-400'
             }`}>
-              <span>
-                {stats.isIncrease ? '📈' : stats.isDecrease ? '📉' : '➖'}
-              </span>
-              <span>
-                {stats.isIncrease ? '+' : ''}
-                {Math.abs(stats.changePercent).toFixed(1)}%
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 最近6个月趋势图 */}
-      <div className="space-y-2">
-        <div className="text-sm text-gray-400 font-medium">最近6个月趋势:</div>
-        <div className="flex items-end justify-between gap-1 h-16 bg-gray-800/30 rounded-lg p-2">
-          {monthlyData.map((data, index) => {
-            const isCurrentMonth = index === monthlyData.length - 1;
-            const amount = isCurrentMonth ? currentAmount : data.amount;
-            const height = stats?.maxAmount ? (amount / stats.maxAmount) * 100 : 0;
-            
-            return (
-              <div key={data.month} className="flex flex-col items-center gap-1 flex-1">
-                <div 
-                  className={`w-full rounded-sm transition-all duration-300 ${
-                    isCurrentMonth 
-                      ? 'bg-gradient-to-t from-purple-500 to-pink-500 shadow-md' 
-                      : 'bg-gradient-to-t from-purple-600/60 to-pink-600/60'
-                  }`}
-                  style={{ height: `${Math.max(height, 2)}%` }}
-                  title={`${data.displayName}: ¥${amount.toLocaleString('zh-CN')}`}
-                ></div>
-                <div className={`text-xs font-medium ${
-                  isCurrentMonth ? 'text-purple-300' : 'text-gray-500'
-                }`}>
-                  {data.displayName}
-                </div>
-              </div>
-            );
-          })}
+              {change.isIncrease ? '↑' : '↓'}{change.percentage.toFixed(1)}%
+            </span>
+          )}
         </div>
       </div>
 
-      {/* 简单统计 */}
-      {stats && (
-        <div className="mt-4 pt-4 border-t border-purple-700/30">
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="bg-gray-800/60 backdrop-blur-sm rounded-lg p-2 text-center border border-purple-700/30">
-              <div className="text-gray-400 mb-1">环比变化</div>
-              <div className={`font-bold ${
-                stats.isIncrease ? 'text-red-400' : 
-                stats.isDecrease ? 'text-green-400' : 
-                'text-gray-400'
-              }`}>
-                {stats.isIncrease ? '+' : ''}¥{Math.abs(stats.changeAmount).toLocaleString('zh-CN')}
-              </div>
+      {/* 趋势图 */}
+      <div className="mb-4">
+        <div className="text-sm text-purple-200 mb-2">最近7个月趋势:</div>
+        <div className="flex items-end justify-between gap-1 h-16 mb-2">
+          {trendData.map((data, index) => (
+            <div key={data.month} className="flex flex-col items-center flex-1">
+              <div
+                className={`w-full rounded-t transition-all duration-300 ${
+                  data.isSelected 
+                    ? 'bg-blue-400 shadow-lg' 
+                    : 'bg-purple-400/60 hover:bg-purple-400/80'
+                }`}
+                style={{
+                  height: `${Math.max((data.amount / maxAmount) * 100, 2)}%`,
+                  minHeight: '2px'
+                }}
+                title={`${data.displayName}: ¥${data.amount.toFixed(0)}`}
+              />
             </div>
-            <div className="bg-gray-800/60 backdrop-blur-sm rounded-lg p-2 text-center border border-purple-700/30">
-              <div className="text-gray-400 mb-1">趋势</div>
-              <div className={`font-bold ${
-                stats.isIncrease ? 'text-red-400' : 
-                stats.isDecrease ? 'text-green-400' : 
-                'text-gray-400'
-              }`}>
-                {stats.isIncrease ? '上升' : stats.isDecrease ? '下降' : '持平'}
-              </div>
-            </div>
+          ))}
+        </div>
+        <div className="flex justify-between text-xs text-purple-300">
+          {trendData.map((data) => (
+            <span key={data.month} className={data.isSelected ? 'text-blue-300 font-semibold' : ''}>
+              {data.displayName}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* 底部统计 */}
+      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-purple-700/50">
+        <div className="text-center">
+          <div className="text-xs text-purple-300">环比变化</div>
+          <div className={`text-sm font-semibold ${
+            change.isIncrease ? 'text-red-400' : 'text-green-400'
+          }`}>
+            {change.percentage > 0 ? (
+              `${change.isIncrease ? '+' : '-'}¥${Math.abs(selectedAmount - previousAmount).toFixed(0)}`
+            ) : (
+              '无变化'
+            )}
           </div>
         </div>
-      )}
+        <div className="text-center">
+          <div className="text-xs text-purple-300">趋势</div>
+          <div className={`text-sm font-semibold ${
+            change.isIncrease ? 'text-red-400' : 'text-green-400'
+          }`}>
+            {change.percentage === 0 ? '持平' : change.isIncrease ? '上升' : '下降'}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
