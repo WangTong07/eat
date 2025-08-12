@@ -645,53 +645,6 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
         </div>
       </div>
       
-      <div>
-        <button 
-          className="bg-gray-800/70 hover:bg-gray-700/70 backdrop-blur-sm border border-indigo-700/30 text-indigo-400 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md"
-          onClick={()=> setOpen(o=>!o)}
-        >
-          {open? '📤 收起明细' : '📋 缴费明细'}
-        </button>
-      </div>
-      {open && (
-        <div className="mt-4 bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-indigo-700/30">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-indigo-700/30">
-                  <th className="px-3 py-3 text-left font-semibold text-gray-300">姓名</th>
-                  <th className="px-3 py-3 text-left font-semibold text-gray-300">状态</th>
-                  <th className="px-3 py-3 text-right font-semibold text-gray-300">金额</th>
-                </tr>
-              </thead>
-              <tbody>
-                {details.length===0 && (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-4 text-center text-gray-400">暂无成员</td>
-                  </tr>
-                )}
-                {details.map((d,i)=> (
-                  <tr key={i} className="border-b border-gray-700/30 last:border-b-0 hover:bg-gray-700/30 transition-colors duration-150">
-                    <td className="px-3 py-2 font-medium text-gray-200">{d.name}</td>
-                    <td className="px-3 py-2">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        d.paid 
-                          ? 'bg-green-900/40 text-green-400 border border-green-700/50' 
-                          : 'bg-red-900/40 text-red-400 border border-red-700/50'
-                      }`}>
-                        {d.paid ? '✅ 已交' : '❌ 未交'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold text-gray-200">
-                      {d.amount ? `¥${Number(d.amount).toLocaleString('zh-CN', { minimumFractionDigits: 0 })}` : '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
