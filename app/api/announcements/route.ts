@@ -46,23 +46,39 @@ export async function POST(req: NextRequest) {
     
     const supabase = getClient();
     
-    // 尝试插入包含author字段的数据
-    let insertData: any = { content, is_active: is_active !== false };
-    if (author && typeof author === 'string') {
-      insertData.author = author;
+    // 先尝试包含author字段的插入
+    let insertData: any = { 
+      content, 
+      is_active: is_active !== false
+    };
+    
+    // 如果有author，先尝试包含它
+    if (author && typeof author === 'string' && author.trim()) {
+      insertData.author = author.trim();
     }
+    
+    console.log('尝试插入数据:', insertData);
     
     const { error } = await supabase
       .from('announcements')
       .insert(insertData);
       
     if (error) {
-      // 如果author字段不存在，尝试不包含author字段
+      // 如果author字段不存在，回退到不包含author的插入
       if (error.message.includes('author')) {
+        console.log('author字段不存在，使用基础字段插入');
+        const basicData = { content, is_active: is_active !== false };
         const { error: retryError } = await supabase
           .from('announcements')
-          .insert({ content, is_active: is_active !== false });
+          .insert(basicData);
         if (retryError) throw retryError;
+        
+        // 成功插入，但提醒需要添加author字段
+        console.log('插入成功，但author字段未保存');
+        return NextResponse.json({ 
+          success: true, 
+          warning: '发布成功，但发布人信息未保存。请联系管理员添加author字段。' 
+        });
       } else {
         throw error;
       }
@@ -70,6 +86,7 @@ export async function POST(req: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (e: any) {
+    console.error('POST错误:', e);
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }
 }
@@ -80,14 +97,16 @@ export async function PATCH(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id 必填' }, { status: 400 });
     
     const supabase = getClient();
-    const updateData: any = {};
+    let updateData: any = {};
     if (content !== undefined) updateData.content = content;
     if (is_active !== undefined) updateData.is_active = is_active;
     
-    // 只有当author字段存在时才添加到更新数据中
+    // 尝试包含author字段
     if (author !== undefined) {
       updateData.author = author;
     }
+    
+    console.log('尝试更新数据:', updateData);
     
     const { error } = await supabase
       .from('announcements')
@@ -95,17 +114,24 @@ export async function PATCH(req: NextRequest) {
       .eq('id', id);
       
     if (error) {
-      // 如果author字段不存在，尝试不包含author字段的更新
+      // 如果author字段不存在，回退到不包含author的更新
       if (error.message.includes('author')) {
-        const retryUpdateData: any = {};
-        if (content !== undefined) retryUpdateData.content = content;
-        if (is_active !== undefined) retryUpdateData.is_active = is_active;
+        console.log('author字段不存在，使用基础字段更新');
+        const basicUpdateData: any = {};
+        if (content !== undefined) basicUpdateData.content = content;
+        if (is_active !== undefined) basicUpdateData.is_active = is_active;
         
         const { error: retryError } = await supabase
           .from('announcements')
-          .update(retryUpdateData)
+          .update(basicUpdateData)
           .eq('id', id);
         if (retryError) throw retryError;
+        
+        console.log('更新成功，但author字段未保存');
+        return NextResponse.json({ 
+          success: true, 
+          warning: '更新成功，但发布人信息未保存。请联系管理员添加author字段。' 
+        });
       } else {
         throw error;
       }
@@ -113,6 +139,7 @@ export async function PATCH(req: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (e: any) {
+    console.error('PATCH错误:', e);
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }
 }

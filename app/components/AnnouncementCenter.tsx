@@ -22,6 +22,7 @@ export default function AnnouncementCenter() {
   const [customAuthor, setCustomAuthor] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
+  const [isExpanded, setIsExpanded] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -48,9 +49,9 @@ export default function AnnouncementCenter() {
   const [scrollTimeout, setScrollTimeout] = useState<NodeJS.Timeout | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // 自动滚动逻辑
+  // 自动滚动逻辑 - 只在收起状态下启用
   useEffect(() => {
-    if (announcements.length <= 1 || isPaused || isManualScrolling) {
+    if (announcements.length <= 1 || isPaused || isManualScrolling || isExpanded) {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -70,7 +71,7 @@ export default function AnnouncementCenter() {
         clearInterval(intervalRef.current);
       }
     };
-  }, [announcements.length, isPaused, isManualScrolling]);
+  }, [announcements.length, isPaused, isManualScrolling, isExpanded]);
 
   // 处理手动滚动
   const handleScroll = () => {
@@ -163,11 +164,27 @@ export default function AnnouncementCenter() {
       });
       
       if (res.ok) {
+        // 找到被编辑公告在列表中的位置
+        const editedIndex = announcements.findIndex(ann => ann.id === id);
+        
         setFormContent('');
         setFormAuthor('');
         setCustomAuthor('');
         setEditingId(null);
-        fetchAnnouncements();
+        
+        // 立即更新数据
+        await fetchAnnouncements();
+        
+        // 如果找到了被编辑的公告，将currentIndex设置为该公告的位置
+        // 这样用户可以立即看到编辑结果
+        if (editedIndex !== -1) {
+          setCurrentIndex(editedIndex);
+          // 暂停自动滚动2秒，让用户看到编辑结果
+          setIsPaused(true);
+          setTimeout(() => {
+            setIsPaused(false);
+          }, 2000);
+        }
       } else {
         const data = await res.json();
         alert('更新失败: ' + (data.error || '未知错误'));
@@ -241,9 +258,24 @@ export default function AnnouncementCenter() {
           <div className="w-full h-12 bg-amber-700/20 rounded animate-pulse"></div>
           <div className="w-full h-12 bg-amber-700/20 rounded animate-pulse"></div>
         </div>
-      </div>
-    );
-  }
+      {/* 滚动状态提示 - 只在收起状态显示 */}
+      {!isExpanded && (
+        <div className="text-center mt-2">
+          {isPaused && (
+            <span className="text-xs text-amber-500/70">⏸️ 已暂停自动播放</span>
+          )}
+          {isManualScrolling && (
+            <span className="text-xs text-blue-400/70">📜 手动滚动中</span>
+          )}
+          {!isPaused && !isManualScrolling && announcements.length > 1 && (
+            <span className="text-xs text-green-400/70">▶️ 自动播放中</span>
+          )}
+        </div>
+      )}
+
+    </div>
+  );
+}
 
   if (announcements.length === 0) {
     return (
@@ -262,15 +294,37 @@ export default function AnnouncementCenter() {
             </div>
           </div>
           
-          <div className="flex items-center space-x-2">
-            {/* 发布按钮 */}
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="bg-green-900/40 text-green-400 border border-green-700/50 px-2 py-1 rounded-full text-xs font-semibold hover:bg-green-800/40 transition-all duration-200"
-            >
-              + 发布
-            </button>
-          </div>
+        <div className="flex items-center space-x-2">
+          {/* 展开/收起按钮 */}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="bg-blue-900/40 text-blue-400 border border-blue-700/50 px-2 py-1 rounded-full text-xs font-semibold hover:bg-blue-800/40 transition-all duration-200"
+          >
+            {isExpanded ? '📄 收起' : '📋 展开'}
+          </button>
+          
+          {/* 发布按钮 */}
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="bg-green-900/40 text-green-400 border border-green-700/50 px-2 py-1 rounded-full text-xs font-semibold hover:bg-green-800/40 transition-all duration-200"
+          >
+            + 发布
+          </button>
+          
+          {/* 指示器 - 只在收起状态显示 */}
+          {!isExpanded && announcements.length > 1 && (
+            <div className="flex space-x-1">
+              {Array.from({ length: announcements.length }).map((_, index) => (
+                <div
+                  key={index}
+                  className={`w-1.5 h-1.5 rounded-full transition-colors duration-300 ${
+                    index === currentIndex ? 'bg-amber-400' : 'bg-amber-700/50'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
         </div>
 
         {/* 发布公告表单 */}
@@ -340,11 +394,13 @@ export default function AnnouncementCenter() {
     );
   }
 
-  // 获取当前显示的公告（最多2条）
-  const displayedAnnouncements = announcements.slice(currentIndex, currentIndex + 2);
+  // 根据展开状态决定显示的公告
+  const displayedAnnouncements = isExpanded 
+    ? announcements // 展开时显示所有公告
+    : announcements.slice(currentIndex, currentIndex + 2); // 收起时显示当前2条
   
-  // 如果只有1条公告且总数大于1，补充下一条
-  if (displayedAnnouncements.length === 1 && announcements.length > 1) {
+  // 如果收起状态且只有1条公告且总数大于1，补充下一条
+  if (!isExpanded && displayedAnnouncements.length === 1 && announcements.length > 1) {
     displayedAnnouncements.push(announcements[0]); // 循环到第一条
   }
 
@@ -369,6 +425,14 @@ export default function AnnouncementCenter() {
         </div>
         
         <div className="flex items-center space-x-2">
+          {/* 展开/收起按钮 */}
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="bg-blue-900/40 text-blue-400 border border-blue-700/50 px-2 py-1 rounded-full text-xs font-semibold hover:bg-blue-800/40 transition-all duration-200"
+          >
+            {isExpanded ? '📄 收起' : '📋 展开'}
+          </button>
+          
           {/* 发布按钮 */}
           <button
             onClick={() => setShowAddForm(true)}
@@ -377,8 +441,8 @@ export default function AnnouncementCenter() {
             + 发布
           </button>
           
-          {/* 指示器 */}
-          {announcements.length > 1 && (
+          {/* 指示器 - 只在收起状态显示 */}
+          {!isExpanded && announcements.length > 1 && (
             <div className="flex space-x-1">
               {Array.from({ length: announcements.length }).map((_, index) => (
                 <div
@@ -455,11 +519,11 @@ export default function AnnouncementCenter() {
         </div>
       )}
 
-      {/* 公告内容区域 - 支持手动滚动和透明滚动条 */}
+      {/* 公告内容区域 - 根据展开状态调整高度 */}
       <div className="relative">
         <div 
           ref={scrollContainerRef}
-          className="max-h-20 overflow-y-auto announcement-scrollbar pr-2"
+          className={`${isExpanded ? 'max-h-60' : 'max-h-20'} overflow-y-auto announcement-scrollbar pr-2 transition-all duration-300`}
           onScroll={handleScroll}
           style={{
             scrollbarWidth: 'thin',
@@ -577,18 +641,6 @@ export default function AnnouncementCenter() {
         </div>
       </div>
 
-      {/* 滚动状态提示 */}
-      <div className="text-center mt-2">
-        {isPaused && (
-          <span className="text-xs text-amber-500/70">⏸️ 已暂停自动播放</span>
-        )}
-        {isManualScrolling && (
-          <span className="text-xs text-blue-400/70">📜 手动滚动中</span>
-        )}
-        {!isPaused && !isManualScrolling && announcements.length > 1 && (
-          <span className="text-xs text-green-400/70">▶️ 自动播放中</span>
-        )}
-      </div>
     </div>
   );
 }
