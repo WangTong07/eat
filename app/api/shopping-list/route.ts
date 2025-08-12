@@ -130,8 +130,14 @@ export async function POST(request: NextRequest) {
 // PUT: 添加单个购物清单项
 export async function PUT(request: NextRequest) {
   try {
-    // 确保表存在
-    await createShoppingListTable();
+    // 检查表是否存在
+    const tableExists = await checkTableExists();
+    if (!tableExists) {
+      return NextResponse.json(
+        { error: '购物清单表不存在或无法访问' },
+        { status: 500 }
+      );
+    }
     
     const body = await request.json();
     const { item } = body;

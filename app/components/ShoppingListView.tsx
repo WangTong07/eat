@@ -151,36 +151,25 @@ export default function ShoppingListView() {
         return;
       }
       
-      if (data && data.length > 0) {
-        // 将数据库数据转换为应用所需格式
-        const items = data.map(item => ({
-          id: item.id,
-          name: item.name,
-          category: item.category as Category,
-          checked: item.checked || false,
-          qty: item.qty
-        }));
-        setList(items);
-        
-        // 同时更新本地存储作为备份
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('shopping_list_latest', JSON.stringify(items));
-        }
-      } else {
-        // 如果数据库中没有数据，尝试从本地存储恢复
-        const raw = typeof window !== 'undefined' ? window.localStorage.getItem('shopping_list_latest') : null;
-        if (raw) {
-          const saved = JSON.parse(raw);
-          if (Array.isArray(saved) && saved.length > 0) {
-            setList(saved);
-            
-            // 将本地数据同步到数据库
-            await saveToDatabase(saved);
-            return;
-          }
-        }
-        
-        // 如果没有本地数据，根据推荐菜生成初始清单
+      // 将数据库数据转换为应用所需格式（包括空数组的情况）
+      const items = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        category: item.category as Category,
+        checked: item.checked || false,
+        qty: item.qty
+      }));
+      setList(items);
+      
+      // 同时更新本地存储作为备份
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('shopping_list_latest', JSON.stringify(items));
+      }
+      
+      // 只有在首次加载且数据库为空时才生成初始清单
+      if (items.length === 0 && !window.localStorage.getItem('shopping_list_initialized')) {
+        // 标记已初始化，避免重复生成
+        window.localStorage.setItem('shopping_list_initialized', 'true');
         generateInitialList();
       }
     } catch (error) {
@@ -298,10 +287,26 @@ export default function ShoppingListView() {
     onChange: (payload) => {
       console.log('[ShoppingListView] 检测到购物清单变更:', payload);
       
-      // 只在INSERT事件时重新加载，避免DELETE和UPDATE时的重复加载
+      // 监听所有事件类型：INSERT、UPDATE、DELETE
       if (payload.eventType === 'INSERT') {
         console.log('[ShoppingListView] 检测到新增食材，重新加载...');
-        setTimeout(() => loadShoppingList(), 100); // 延迟一点避免冲突
+        setTimeout(() => loadShoppingList(), 100);
+      } else if (payload.eventType === 'UPDATE') {
+        console.log('[ShoppingListView] 检测到食材更新，同步本地状态...');
+        // 直接更新本地状态，避免重新加载整个列表
+        const updatedItem = payload.new;
+        setList(prevList => 
+          prevList.map(item => 
+            item.id === updatedItem.id 
+              ? { ...item, checked: updatedItem.checked, qty: updatedItem.qty }
+              : item
+          )
+        );
+      } else if (payload.eventType === 'DELETE') {
+        console.log('[ShoppingListView] 检测到食材删除，同步本地状态...');
+        // 直接从本地状态中移除，避免重新加载整个列表
+        const deletedItem = payload.old;
+        setList(prevList => prevList.filter(item => item.id !== deletedItem.id));
       }
     }
   });
@@ -562,25 +567,25 @@ export default function ShoppingListView() {
       )}
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="ui-card rounded-xl p-4">
-          <h3 className="font-bold mb-3 flex items-center gap-2 text-gray-800">
+        <div className="bg-gradient-to-br from-orange-900/30 via-amber-900/30 to-yellow-900/30 border border-orange-700/30 shadow-xl hover:shadow-2xl transition-all duration-300 rounded-xl p-6 backdrop-blur-sm">
+          <h3 className="font-bold mb-4 flex items-center gap-2 bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 bg-clip-text text-transparent">
             <span className="text-xl">➕</span>
             快速添加
           </h3>
           <div className="flex gap-3 items-center">
             <input 
-              className="border border-gray-300 rounded-lg px-4 py-2 flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" 
+              className="bg-gradient-to-r from-orange-800/30 to-amber-800/30 border border-orange-600/30 rounded-lg px-4 py-2 flex-1 text-orange-100 placeholder-orange-400/70 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200" 
               placeholder="🥬 输入食材名称" 
               value={newName} 
               onChange={e=>setNewName(e.target.value)}
               onKeyPress={e => e.key === 'Enter' && addItem()}
             />
-            <select className="border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors" value={newCat} onChange={e=>setNewCat(e.target.value as Category | "智能分类")}>
+            <select className="bg-gradient-to-r from-orange-800/30 to-amber-800/30 border border-orange-600/30 rounded-lg px-4 py-2 text-orange-100 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-200" value={newCat} onChange={e=>setNewCat(e.target.value as Category | "智能分类")}>
               <option value="智能分类">🤖 智能分类</option>
               {CATEGORY_ORDER.map(c => <option key={c} value={c}>{CATEGORY_EMOJIS[c]} {c}</option>)}
             </select>
             <button 
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" 
+              className="px-4 py-2 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-600 hover:from-orange-600 hover:via-amber-600 hover:to-yellow-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95" 
               onClick={addItem}
               disabled={isLoading || !newName.trim()}
             >
@@ -599,14 +604,14 @@ export default function ShoppingListView() {
           </div>
         </div>
         
-        <div className="ui-card rounded-xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-bold flex items-center gap-2 text-gray-800">
+        <div className="bg-gradient-to-br from-orange-900/30 via-amber-900/30 to-yellow-900/30 border border-orange-700/30 shadow-xl hover:shadow-2xl transition-all duration-300 rounded-xl p-6 backdrop-blur-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold flex items-center gap-2 bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-400 bg-clip-text text-transparent">
               <span className="text-xl">🍽️</span>
               从推荐菜生成清单
             </h3>
             <button 
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2" 
+              className="px-4 py-2 bg-gradient-to-r from-emerald-500 via-green-500 to-teal-600 hover:from-emerald-600 hover:via-green-600 hover:to-teal-700 text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl transform hover:scale-105 active:scale-95" 
               onClick={() => {
                 if (window.confirm('这将清空当前购物清单并从推荐菜中重新生成，确定继续吗？')) {
                   generateInitialList();
@@ -627,20 +632,20 @@ export default function ShoppingListView() {
               )}
             </button>
           </div>
-          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+          <div className="text-sm text-orange-200/80 bg-gradient-to-r from-orange-800/20 via-amber-800/20 to-yellow-800/20 border border-orange-600/30 p-4 rounded-lg backdrop-blur-sm">
             {recs.length > 0 ? (
               <div>
                 <p className="flex items-center gap-2 mb-2">
                   <span className="text-base">📋</span>
-                  <strong>本周推荐菜：</strong>{recs.map(r => r.dish).join('、')}
+                  <strong className="text-orange-100">本周推荐菜：</strong>{recs.map(r => r.dish).join('、')}
                 </p>
-                <p className="flex items-center gap-2 text-gray-500">
+                <p className="flex items-center gap-2 text-orange-300/70">
                   <span className="text-base">💡</span>
                   点击"重新生成"按钮将根据推荐菜自动添加所需食材
                 </p>
               </div>
             ) : (
-              <p className="flex items-center gap-2 text-gray-400">
+              <p className="flex items-center gap-2 text-orange-400/70">
                 <span className="text-base">😴</span>
                 暂无推荐菜数据
               </p>
@@ -652,54 +657,143 @@ export default function ShoppingListView() {
       {isLoading ? (
         <div className="text-center py-4">加载中...</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {CATEGORY_ORDER.map(cat => (
-            <div key={cat} className="ui-card rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold flex items-center gap-2 text-gray-800">
-                  <span className="text-xl">{CATEGORY_EMOJIS[cat]}</span>
-                  {cat}
-                </h3>
-                <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full font-medium">
-                  {byCat[cat]?.length || 0} 项
-                </span>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {CATEGORY_ORDER.map((cat, index) => {
+            // 为每个分类定义不同的橙色系配色
+            const categoryStyles = {
+              "肉类": {
+                bg: "from-red-900/40 via-orange-900/35 to-amber-900/30",
+                border: "border-red-700/40",
+                shadow: "shadow-red-500/10",
+                hoverShadow: "hover:shadow-red-500/20",
+                title: "from-red-400 via-orange-400 to-amber-400",
+                badge: "from-red-500/25 to-orange-500/20 border-red-500/40",
+                badgeText: "text-red-200",
+                iconBg: "bg-gradient-to-br from-red-500/30 to-orange-500/20",
+                itemBg: "from-red-800/25 via-orange-800/20 to-amber-800/15",
+                itemHover: "hover:from-red-800/35 hover:via-orange-800/30 hover:to-amber-800/25"
+              },
+              "蔬果类": {
+                bg: "from-green-900/35 via-yellow-900/40 to-orange-900/30",
+                border: "border-green-700/30",
+                shadow: "shadow-green-500/10",
+                hoverShadow: "hover:shadow-green-500/20",
+                title: "from-green-400 via-yellow-400 to-orange-400",
+                badge: "from-green-500/20 to-yellow-500/25 border-green-500/30",
+                badgeText: "text-green-200",
+                iconBg: "bg-gradient-to-br from-green-500/25 to-yellow-500/30",
+                itemBg: "from-green-800/20 via-yellow-800/25 to-orange-800/15",
+                itemHover: "hover:from-green-800/30 hover:via-yellow-800/35 hover:to-orange-800/25"
+              },
+              "海鲜类": {
+                bg: "from-blue-900/35 via-cyan-900/30 to-orange-900/35",
+                border: "border-blue-700/40",
+                shadow: "shadow-blue-500/10",
+                hoverShadow: "hover:shadow-blue-500/20",
+                title: "from-blue-400 via-cyan-400 to-orange-400",
+                badge: "from-blue-500/25 to-cyan-500/20 border-blue-500/40",
+                badgeText: "text-blue-200",
+                iconBg: "bg-gradient-to-br from-blue-500/30 to-cyan-500/25",
+                itemBg: "from-blue-800/25 via-cyan-800/20 to-orange-800/15",
+                itemHover: "hover:from-blue-800/35 hover:via-cyan-800/30 hover:to-orange-800/25"
+              },
+              "调料类": {
+                bg: "from-amber-900/45 via-orange-900/40 to-yellow-900/35",
+                border: "border-amber-700/50",
+                shadow: "shadow-amber-500/15",
+                hoverShadow: "hover:shadow-amber-500/25",
+                title: "from-amber-300 via-orange-400 to-yellow-400",
+                badge: "from-amber-500/30 to-orange-500/25 border-amber-500/50",
+                badgeText: "text-amber-100",
+                iconBg: "bg-gradient-to-br from-amber-500/35 to-orange-500/30",
+                itemBg: "from-amber-800/30 via-orange-800/25 to-yellow-800/20",
+                itemHover: "hover:from-amber-800/40 hover:via-orange-800/35 hover:to-yellow-800/30"
+              },
+              "日杂类": {
+                bg: "from-purple-900/30 via-pink-900/25 to-orange-900/35",
+                border: "border-purple-700/35",
+                shadow: "shadow-purple-500/10",
+                hoverShadow: "hover:shadow-purple-500/20",
+                title: "from-purple-400 via-pink-400 to-orange-400",
+                badge: "from-purple-500/20 to-pink-500/25 border-purple-500/35",
+                badgeText: "text-purple-200",
+                iconBg: "bg-gradient-to-br from-purple-500/25 to-pink-500/30",
+                itemBg: "from-purple-800/20 via-pink-800/15 to-orange-800/20",
+                itemHover: "hover:from-purple-800/30 hover:via-pink-800/25 hover:to-orange-800/30"
+              },
+              "饮品类": {
+                bg: "from-indigo-900/35 via-blue-900/30 to-orange-900/30",
+                border: "border-indigo-700/40",
+                shadow: "shadow-indigo-500/10",
+                hoverShadow: "hover:shadow-indigo-500/20",
+                title: "from-indigo-400 via-blue-400 to-orange-400",
+                badge: "from-indigo-500/25 to-blue-500/20 border-indigo-500/40",
+                badgeText: "text-indigo-200",
+                iconBg: "bg-gradient-to-br from-indigo-500/30 to-blue-500/25",
+                itemBg: "from-indigo-800/25 via-blue-800/20 to-orange-800/15",
+                itemHover: "hover:from-indigo-800/35 hover:via-blue-800/30 hover:to-orange-800/25"
+              }
+            };
+            
+            const style = categoryStyles[cat];
+            
+            return (
+              <div key={cat} className={`bg-gradient-to-br ${style.bg} border ${style.border} ${style.shadow} ${style.hoverShadow} shadow-xl transition-all duration-300 rounded-xl p-4 backdrop-blur-sm transform hover:scale-[1.02]`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className={`font-bold flex items-center gap-2 bg-gradient-to-r ${style.title} bg-clip-text text-transparent text-lg`}>
+                    <span className="text-lg">{CATEGORY_EMOJIS[cat]}</span>
+                    {cat}
+                  </h3>
+                  <span className={`text-xs bg-gradient-to-r ${style.badge} ${style.badgeText} px-2.5 py-1 rounded-full font-semibold backdrop-blur-sm`}>
+                    {byCat[cat]?.length || 0} 项
+                  </span>
+                </div>
+                <ul className="space-y-1.5 max-h-80 overflow-auto pr-2">
+                  {(byCat[cat]||[]).map(it => (
+                    <li key={it.id} className={`flex items-center justify-between py-2 px-3 rounded-lg bg-gradient-to-r ${style.itemBg} border border-white/10 ${style.itemHover} transition-all duration-200 backdrop-blur-sm group`}>
+                      <label className="flex items-center gap-2.5 cursor-pointer flex-1">
+                        <div className="relative">
+                          <input 
+                            type="checkbox" 
+                            checked={!!it.checked} 
+                            onChange={() => updateItemStatus(it.id, !it.checked)}
+                            className="w-4 h-4 text-orange-500 bg-orange-800/30 border-orange-600/50 rounded focus:ring-orange-500/50 focus:ring-2 transition-all duration-200"
+                          />
+                          {it.checked && (
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <span className="text-green-400 text-xs animate-pulse">✓</span>
+                            </div>
+                          )}
+                        </div>
+                        <span className={`${it.checked ? 'line-through text-orange-400/60' : 'text-orange-100 group-hover:text-white'} font-medium transition-colors duration-200 text-sm`}>
+                          {it.name}
+                        </span>
+                      </label>
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-2.5 h-2.5 rounded-full ${it.checked ? 'bg-gradient-to-r from-green-400 to-emerald-500 shadow-green-400/50' : 'bg-gradient-to-r from-orange-400 to-amber-500 shadow-orange-400/50'} shadow-md animate-pulse`}></div>
+                        <button 
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs bg-gradient-to-r from-red-500/25 to-pink-500/20 text-red-300 hover:from-red-500/35 hover:to-pink-500/30 hover:text-red-200 rounded-md transition-all duration-200 font-medium border border-red-500/30 backdrop-blur-sm transform hover:scale-105 active:scale-95 shadow-md hover:shadow-red-500/20"
+                          onClick={() => removeItem(it.id)}
+                          title="删除此项"
+                        >
+                          <span className="text-sm">🗑️</span>
+                          删除
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                  {(byCat[cat]||[]).length===0 && (
+                    <li className="text-center py-6 text-orange-400/70 italic">
+                      <div className={`inline-block p-3 rounded-full ${style.iconBg} backdrop-blur-sm border border-white/10 mb-2`}>
+                        <span className="text-3xl">📝</span>
+                      </div>
+                      <div className="text-xs">暂无物品</div>
+                    </li>
+                  )}
+                </ul>
               </div>
-              <ul className="space-y-3">
-                {(byCat[cat]||[]).map(it => (
-                  <li key={it.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors">
-                    <label className="flex items-center gap-3 cursor-pointer flex-1">
-                      <input 
-                        type="checkbox" 
-                        checked={!!it.checked} 
-                        onChange={() => updateItemStatus(it.id, !it.checked)}
-                        className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
-                      />
-                      <span className={`${it.checked ? 'line-through text-gray-400' : 'text-gray-700'} font-medium`}>
-                        {it.name}
-                      </span>
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${it.checked ? 'bg-green-500' : 'bg-orange-400'}`}></div>
-                      <button 
-                        className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors duration-200 font-medium"
-                        onClick={() => removeItem(it.id)}
-                        title="删除此项"
-                      >
-                        <span className="text-base">🗑️</span>
-                        删除
-                      </button>
-                    </div>
-                  </li>
-                ))}
-                {(byCat[cat]||[]).length===0 && (
-                  <li className="text-center py-4 text-gray-400 italic">
-                    <span className="text-2xl block mb-1">📝</span>
-                    暂无物品
-                  </li>
-                )}
-              </ul>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
