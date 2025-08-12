@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 
 // 智能美食图片匹配系统 - 与首页菜品推荐保持一致
 const getSmartFoodImage = (dishName: string) => {
@@ -179,6 +180,8 @@ const getSmartFoodImage = (dishName: string) => {
 
 export default function WishForm() {
   const [userName, setUserName] = useState("");
+  const [customUserName, setCustomUserName] = useState("");
+  const [availableNames, setAvailableNames] = useState<string[]>([]);
   const [requestType, setRequestType] = useState<"想吃的菜" | "忌口">("想吃的菜");
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
@@ -188,14 +191,19 @@ export default function WishForm() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage(null);
-    if (!userName || !content) {
+    
+    // 🎯 智能姓名处理：支持下拉选择和手动输入
+    const finalUserName = userName === 'custom' ? customUserName.trim() : userName;
+    
+    if (!finalUserName || !content) {
       setMessage("请填写姓名与内容");
       return;
     }
+    
     setLoading(true);
     const supabase = getSupabaseClient();
     const { error } = await supabase.from("menu_wishes").insert({
-      user_name: userName,
+      user_name: finalUserName,
       request_type: requestType,
       content,
       status: "待处理",
@@ -204,6 +212,8 @@ export default function WishForm() {
     else {
       setMessage("提交成功，已加入心愿池");
       setContent("");
+      setUserName("");
+      setCustomUserName("");
       // refresh list
       const { data } = await supabase
         .from('menu_wishes')
@@ -215,8 +225,60 @@ export default function WishForm() {
     setLoading(false);
   };
 
+  // 🎯 加载数据和实时同步
   useEffect(()=>{
     const load = async () => {
+      const supabase = getSupabaseClient();
+      
+      // 🎯 加载心愿池数据
+      const { data: wishData } = await supabase
+        .from('menu_wishes')
+        .select('id, user_name, request_type, content, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(100);
+      setPool(wishData || []);
+      
+      // 🎯 加载活跃成员姓名列表
+      const { data: memberData } = await supabase
+        .from('household_members')
+        .select('name')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (memberData) {
+        const names = memberData.map(member => member.name);
+        setAvailableNames(names);
+        console.log('✅ [WishForm] 加载成员姓名列表:', names);
+      }
+    };
+    load();
+  }, []);
+
+  // 🎯 实时订阅成员变更，保持姓名列表同步
+  useRealtimeSubscription({
+    table: 'household_members',
+    onChange: async () => {
+      console.log('[WishForm] 检测到成员变更，重新加载姓名列表...');
+      const supabase = getSupabaseClient();
+      const { data: memberData } = await supabase
+        .from('household_members')
+        .select('name')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (memberData) {
+        const names = memberData.map(member => member.name);
+        setAvailableNames(names);
+        console.log('✅ [WishForm] 实时更新成员姓名列表:', names);
+      }
+    }
+  });
+
+  // 🎯 实时订阅心愿池变更
+  useRealtimeSubscription({
+    table: 'menu_wishes',
+    onChange: async () => {
+      console.log('[WishForm] 检测到心愿池变更，重新加载...');
       const supabase = getSupabaseClient();
       const { data } = await supabase
         .from('menu_wishes')
@@ -224,9 +286,8 @@ export default function WishForm() {
         .order('created_at', { ascending: false })
         .limit(100);
       setPool(data || []);
-    };
-    load();
-  }, []);
+    }
+  });
 
   return (
     <section className="w-full">
@@ -247,12 +308,32 @@ export default function WishForm() {
         <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-4">
           <div className="sm:col-span-1">
             <label className="block text-green-300 text-sm font-medium mb-2">👤 姓名</label>
-            <input
-              className="w-full bg-gray-800/50 border border-green-700/30 rounded-lg px-4 py-3 text-gray-200 placeholder-gray-400 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 transition-all duration-200"
-              placeholder="请输入姓名"
-              value={userName}
-              onChange={(e) => setUserName(e.target.value)}
-            />
+            <div className="space-y-2">
+              <select
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                className="w-full bg-gray-800/50 border border-green-700/30 rounded-lg px-4 py-3 text-gray-200 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 transition-all duration-200"
+              >
+                <option value="">选择姓名...</option>
+                {availableNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+                <option value="custom">手动输入...</option>
+              </select>
+              {userName === 'custom' && (
+                <input
+                  type="text"
+                  value={customUserName}
+                  onChange={(e) => setCustomUserName(e.target.value)}
+                  placeholder="请输入姓名..."
+                  className="w-full bg-gray-800/50 border border-green-700/30 rounded-lg px-4 py-3 text-gray-200 placeholder-gray-400 focus:border-green-500/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 transition-all duration-200"
+                  maxLength={50}
+                  autoFocus
+                />
+              )}
+            </div>
           </div>
           
           <div className="sm:col-span-1">
@@ -405,5 +486,3 @@ export default function WishForm() {
     </section>
   );
 }
-
-

@@ -22,6 +22,13 @@ export default function PeoplePage() {
   const [todayCount, setTodayCount] = useState(5);
   const [members, setMembers] = useState<Array<{id:string;name:string;role?:string;is_active?:boolean}>>([]);
   const [syncing, setSyncing] = useState(false);
+  const [loadingStates, setLoadingStates] = useState({
+    members: true,
+    assignments: true,
+    payments: true,
+    headcount: true,
+    dutyWeek: true
+  });
   const [newName, setNewName] = useState("");
   const [dutyWeek, setDutyWeek] = useState<{id?:string; member_a_id?:string|null; member_b_id?:string|null; a_confirmed?:boolean; b_confirmed?:boolean} | null>(null);
   const [assignYear, setAssignYear] = useState<number>(new Date().getFullYear());
@@ -105,52 +112,65 @@ export default function PeoplePage() {
     return ranges;
   }
 
-  // 🔄 加载值班安排 - 纯加载模式，不执行自动继承
+  // 🚀 优化后的值班安排加载 - 并行查询，减少延迟
   const reloadAssignments = async (year: number, month: number) => {
     try {
       const supabase = getSupabaseClient();
+      const startTime = performance.now();
       
-      console.log(`🔍 加载 ${year}年${month}月 值班安排（纯加载模式）`);
+      console.log(`🔍 [优化] 并行加载 ${year}年${month}月 值班安排...`);
       
-      // 1. 加载当前月的值班安排
-      const { data: currentData, error: currentError } = await supabase
-        .from('duty_staff_assignments')
-        .select('*')
-        .eq('year', year)
-        .eq('month', month);
-
-      if (currentError) throw currentError;
-
-      // 2. 如果当月没有值班安排，直接返回空状态（不自动继承）
-      if (!currentData || currentData.length === 0) {
+      // 🎯 关键优化：并行查询当月和下月数据
+      const nextMonth = month === 12 ? 1 : month + 1;
+      const nextYear = month === 12 ? year + 1 : year;
+      
+      const [currentResult, nextMonthResult] = await Promise.allSettled([
+        // 当月数据
+        supabase
+          .from('duty_staff_assignments')
+          .select('member_id, week_in_month')
+          .eq('year', year)
+          .eq('month', month),
+        
+        // 下月前2周数据（用于跨月显示）
+        supabase
+          .from('duty_staff_assignments')
+          .select('member_id, week_in_month')
+          .eq('year', nextYear)
+          .eq('month', nextMonth)
+          .lte('week_in_month', 2)
+      ]);
+      
+      // 处理当月数据
+      const currentData = currentResult.status === 'fulfilled' && !currentResult.value.error 
+        ? currentResult.value.data || []
+        : [];
+      
+      // 处理下月数据
+      const nextMonthData = nextMonthResult.status === 'fulfilled' && !nextMonthResult.value.error
+        ? nextMonthResult.value.data || []
+        : [];
+      
+      // 如果当月没有数据，返回空状态
+      if (currentData.length === 0) {
         console.log(`📋 ${year}年${month}月 无值班安排，返回空状态`);
         setStaffAssign({});
         setStaffSet({});
         return;
       }
-
-      // 3. 加载下个月前几周的数据（仅用于显示跨月分配）
-      const nextMonth = month === 12 ? 1 : month + 1;
-      const nextYear = month === 12 ? year + 1 : year;
       
-      const { data: nextMonthData } = await supabase
-        .from('duty_staff_assignments')
-        .select('*')
-        .eq('year', nextYear)
-        .eq('month', nextMonth)
-        .lte('week_in_month', 2); // 只取下月前2周
-
-      // 4. 处理当前月数据
+      // 🎯 优化：使用Map提高处理效率
       const serverMap: Record<string, number|null> = {};
       const serverPresent: Record<string, boolean> = {};
       
-      (currentData || []).forEach((x: any) => { 
+      // 处理当月数据
+      currentData.forEach((x: any) => { 
         serverMap[x.member_id] = x.week_in_month ?? null; 
         serverPresent[x.member_id] = true; 
       });
 
-      // 5. 处理下月数据（显示为负数，表示下月）
-      (nextMonthData || []).forEach((x: any) => {
+      // 处理下月数据（显示为负数，表示下月）
+      nextMonthData.forEach((x: any) => {
         if (!serverPresent[x.member_id]) { // 避免重复
           serverMap[x.member_id] = -(x.week_in_month ?? 0); // 负数表示下月
           serverPresent[x.member_id] = true;
@@ -160,33 +180,52 @@ export default function PeoplePage() {
       setStaffAssign(serverMap);
       setStaffSet(serverPresent);
       
-      console.log(`✅ 已加载 ${year}年${month}月 值班安排:`, { 
-        当月记录: currentData?.length || 0,
-        下月前2周: nextMonthData?.length || 0,
-        serverMap, 
-        serverPresent 
+      const endTime = performance.now();
+      const loadTime = Math.round(endTime - startTime);
+      
+      console.log(`✅ [优化] ${year}年${month}月 值班安排加载完成 (${loadTime}ms):`, { 
+        当月记录: currentData.length,
+        下月前2周: nextMonthData.length,
+        总人员: Object.keys(serverPresent).length
       });
     } catch (error) {
       console.error('❌ 加载值班安排失败:', error);
+      // 设置空状态，避免界面卡住
+      setStaffAssign({});
+      setStaffSet({});
     }
   };
 
   const reloadPayStatus = async (year: number, month: number) => {
     try {
       const supabase = getSupabaseClient();
+      const startTime = performance.now();
+      
+      console.log(`🔍 [优化] 加载 ${year}年${month}月 付款状态...`);
+      
+      // 🎯 优化：只查询必要字段，减少数据传输
       const { data, error } = await supabase
         .from('member_payments')
-        .select('*')
+        .select('member_id, paid')
         .eq('year', year)
         .eq('month', month);
 
       if (error) throw error;
 
+      // 🎯 优化：使用Map提高处理效率
       const map: Record<string, boolean> = {};
       (data || []).forEach((x: any) => { map[x.member_id] = !!x.paid; });
       setPayMap(map);
+      
+      const endTime = performance.now();
+      const loadTime = Math.round(endTime - startTime);
+      
+      console.log(`✅ [优化] ${year}年${month}月 付款状态加载完成 (${loadTime}ms):`, {
+        付款记录: data?.length || 0
+      });
     } catch (error) {
-      console.error('加载付款状态失败:', error);
+      console.error('❌ 加载付款状态失败:', error);
+      setPayMap({}); // 设置空状态，避免界面异常
     }
   };
 
@@ -222,42 +261,140 @@ export default function PeoplePage() {
 
   useEffect(() => {
     (async () => {
-      // 首先确保自动延续数据存在
-      await autoEnsureCurrentAndFutureMonths();
+      console.log('🚀 [PeoplePage] 开始并行加载数据...');
+      const startTime = performance.now();
       
-      // 直接从数据库加载，不使用本地存储
+      // 🎯 关键优化：将自动延续系统移到后台执行，不阻塞页面加载
+      const autoExtensionPromise = autoEnsureCurrentAndFutureMonths().catch(err => {
+        console.warn('⚠️ 自动延续系统执行失败（不影响页面加载）:', err);
+      });
       
-      const res = await fetch("/api/headcount/today");
-      const j = await res.json();
-      if (j.weekNumber) setWeekNumber(j.weekNumber);
-      if (typeof j.base === 'number') setBase(j.base);
-      if (typeof j.delta === 'number') setDelta(j.delta);
-      if (typeof j.todayCount === 'number') setTodayCount(j.todayCount);
+      // 🚀 并行加载所有必需数据，带进度跟踪
+      const [
+        headcountResult,
+        membersResult,
+        dutyWeekResult,
+        assignmentsResult,
+        payStatusResult
+      ] = await Promise.allSettled([
+        // 1. 头数统计
+        fetch("/api/headcount/today").then(res => res.json()).then(data => {
+          setLoadingStates(prev => ({ ...prev, headcount: false }));
+          return data;
+        }),
+        
+        // 2. 成员数据（优化兜底逻辑）
+        (async () => {
+          try {
+            setSyncing(true);
+            const data = await getFreshHouseholdMembers();
+            setLoadingStates(prev => ({ ...prev, members: false }));
+            return { data: data || [], source: 'fresh' };
+          } catch {
+            try {
+              const r2 = await fetch('/api/members');
+              const j2 = await r2.json();
+              setLoadingStates(prev => ({ ...prev, members: false }));
+              return { data: j2.items || [], source: 'api' };
+            } catch {
+              setLoadingStates(prev => ({ ...prev, members: false }));
+              return { data: [], source: 'fallback' };
+            }
+          }
+        })(),
+        
+        // 3. 值班周数据（延迟获取weekNumber）
+        (async () => {
+          try {
+            const headcount = await fetch("/api/headcount/today").then(res => res.json());
+            const r3 = await fetch(`/api/duty/weeks?weekNumber=${headcount.weekNumber || weekNumber}`);
+            const result = await r3.json();
+            setLoadingStates(prev => ({ ...prev, dutyWeek: false }));
+            return result;
+          } catch {
+            setLoadingStates(prev => ({ ...prev, dutyWeek: false }));
+            return { item: null };
+          }
+        })(),
+        
+        // 4. 值班安排
+        (async () => {
+          try {
+            await reloadAssignments(assignYear, assignMonth);
+            setLoadingStates(prev => ({ ...prev, assignments: false }));
+            return { success: true };
+          } catch (err) {
+            console.warn('值班安排加载失败:', err);
+            setLoadingStates(prev => ({ ...prev, assignments: false }));
+            return { success: false };
+          }
+        })(),
+        
+        // 5. 付款状态
+        (async () => {
+          try {
+            await reloadPayStatus(assignYear, assignMonth);
+            setLoadingStates(prev => ({ ...prev, payments: false }));
+            return { success: true };
+          } catch (err) {
+            console.warn('付款状态加载失败:', err);
+            setLoadingStates(prev => ({ ...prev, payments: false }));
+            return { success: false };
+          }
+        })()
+      ]);
       
-      try {
-        setSyncing(true);
-        const data = await getFreshHouseholdMembers();
-        setMembers(data || []);
-        clearLocalFallbackData();
-      } catch {
-        // 兜底：使用原有 API
-        try {
-          const r2 = await fetch('/api/members');
-          const j2 = await r2.json();
-          setMembers(j2.items || []);
-        } catch {}
-      } finally {
-        setSyncing(false);
+      // 处理头数统计结果
+      if (headcountResult.status === 'fulfilled') {
+        const j = headcountResult.value;
+        if (j.weekNumber) setWeekNumber(j.weekNumber);
+        if (typeof j.base === 'number') setBase(j.base);
+        if (typeof j.delta === 'number') setDelta(j.delta);
+        if (typeof j.todayCount === 'number') setTodayCount(j.todayCount);
+        console.log('✅ 头数统计加载完成');
+      } else {
+        console.warn('⚠️ 头数统计加载失败:', headcountResult.reason);
       }
       
-      try {
-        const r3 = await fetch(`/api/duty/weeks?weekNumber=${j.weekNumber || weekNumber}`);
-        const j3 = await r3.json();
-        setDutyWeek(j3.item || null);
-      } catch {}
+      // 处理成员数据结果
+      if (membersResult.status === 'fulfilled') {
+        const result = membersResult.value;
+        setMembers(result.data);
+        if (result.source === 'fresh') {
+          clearLocalFallbackData();
+        }
+        console.log(`✅ 成员数据加载完成 (${result.data.length}个成员，来源: ${result.source})`);
+      } else {
+        console.warn('⚠️ 成员数据加载失败:', membersResult.reason);
+        setMembers([]);
+      }
+      setSyncing(false);
       
-      try { await reloadAssignments(assignYear, assignMonth); } catch {}
-      try { await reloadPayStatus(assignYear, assignMonth); } catch {}
+      // 处理值班周数据结果
+      if (dutyWeekResult.status === 'fulfilled') {
+        const j3 = dutyWeekResult.value;
+        setDutyWeek(j3.item || null);
+        console.log('✅ 值班周数据加载完成');
+      } else {
+        console.warn('⚠️ 值班周数据加载失败:', dutyWeekResult.reason);
+      }
+      
+      // 记录加载性能
+      const endTime = performance.now();
+      const loadTime = Math.round(endTime - startTime);
+      console.log(`🎉 [PeoplePage] 并行加载完成，耗时: ${loadTime}ms`);
+      console.log('📊 加载结果统计:', {
+        头数统计: headcountResult.status,
+        成员数据: membersResult.status,
+        值班周: dutyWeekResult.status,
+        值班安排: assignmentsResult.status,
+        付款状态: payStatusResult.status
+      });
+      
+      // 🔄 后台执行自动延续系统（不阻塞用户交互）
+      autoExtensionPromise.then(() => {
+        console.log('✅ 后台自动延续系统执行完成');
+      });
     })();
   }, []);
 
@@ -329,6 +466,7 @@ export default function PeoplePage() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
               成员列表
+              {loadingStates.members && <span className="ml-2 text-sm text-blue-300 animate-pulse">🔄 加载中...</span>}
               {syncing && <span className="ml-2 text-sm text-blue-300">🔄 同步中...</span>}
             </h3>
             <div className="text-purple-400/70 font-medium flex items-center gap-4">
