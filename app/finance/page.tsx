@@ -3,6 +3,7 @@ import Shell from "../dashboard/Shell";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
+import MonthlyComparisonCard from "../components/MonthlyComparisonCard";
 
 // 固定月费（按工作日分摊）
 const MONTH_PRICE = 920;
@@ -276,8 +277,12 @@ export default function FinancePage(){
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <PaymentStatsCard ym={ym} refreshKey={payRefreshKey} onBudgetChange={setLinkedBudget} expenseItems={items} />
+        <MonthlyComparisonCard 
+          currentMonth={ym} 
+          currentAmount={items.reduce((sum, item) => sum + Number(item.amount || 0), 0)} 
+        />
       </div>
 
       <div className="bg-gradient-to-br from-emerald-900/30 to-teal-900/30 border border-emerald-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
