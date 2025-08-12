@@ -155,21 +155,8 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
         <div className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
           📈 月度花销对比
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="bg-purple-700/50 border border-purple-600 rounded-lg px-3 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-400"
-          >
-            {monthOptions.map(option => (
-              <option key={option.value} value={option.value} className="bg-purple-800">
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md">
-            <span className="text-white text-lg">📊</span>
-          </div>
+        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md">
+          <span className="text-white text-lg">📊</span>
         </div>
       </div>
 
@@ -179,8 +166,27 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
           <div className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
             ¥{stats?.selectedAmount.toLocaleString('zh-CN', { minimumFractionDigits: 0 }) || '0'}
           </div>
-          <div className="text-lg text-gray-400 font-medium">
-            {monthOptions.find(opt => opt.value === selectedMonth)?.label.replace('年', '年').replace('月', '月') || '本月'}
+          <div className="relative">
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="text-lg text-gray-400 font-medium bg-transparent border-none outline-none cursor-pointer appearance-none pr-4 hover:text-gray-300 transition-colors"
+              style={{ 
+                background: 'transparent',
+                color: 'rgb(156 163 175)', // text-gray-400
+                fontSize: '1.125rem', // text-lg
+                fontWeight: '500' // font-medium
+              }}
+            >
+              {monthOptions.map(option => (
+                <option key={option.value} value={option.value} className="bg-gray-800 text-white">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div className="absolute right-0 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 text-xs">
+              ▼
+            </div>
           </div>
         </div>
         
