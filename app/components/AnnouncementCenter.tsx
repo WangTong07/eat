@@ -600,7 +600,7 @@ export default function AnnouncementCenter() {
                         {announcement.content}
                       </p>
                       {/* 操作按钮 */}
-                      <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="flex space-x-1 opacity-70 hover:opacity-100 transition-opacity duration-200">
                         <button
                           onClick={() => startEdit(announcement)}
                           className="p-1 text-amber-400/70 hover:text-amber-400 hover:bg-amber-900/30 rounded transition-colors duration-200"
