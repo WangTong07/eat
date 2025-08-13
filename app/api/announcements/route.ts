@@ -10,25 +10,54 @@ function getClient() {
 export async function GET() {
   try {
     const supabase = getClient();
-    // 先尝试包含author字段
+    // 先尝试包含所有新字段
     let { data, error } = await supabase
       .from('announcements')
-      .select('id, created_at, content, is_active, author')
+      .select('id, created_at, content, is_active, author, type, likes, comments')
       .order('created_at', { ascending: false });
     
-    // 如果author字段不存在，则不包含它
-    if (error && error.message.includes('author')) {
-      const { data: dataWithoutAuthor, error: errorWithoutAuthor } = await supabase
+    // 如果新字段不存在，逐步回退
+    if (error) {
+      // 尝试包含部分字段
+      const { data: dataPartial, error: errorPartial } = await supabase
         .from('announcements')
-        .select('id, created_at, content, is_active')
+        .select('id, created_at, content, is_active, author')
         .order('created_at', { ascending: false });
       
-      if (errorWithoutAuthor) throw errorWithoutAuthor;
-      
-      // 为每个项目添加默认的author字段
-      data = dataWithoutAuthor?.map(item => ({ ...item, author: null })) || [];
-    } else if (error) {
-      throw error;
+      if (errorPartial) {
+        // 最基础的字段
+        const { data: dataBasic, error: errorBasic } = await supabase
+          .from('announcements')
+          .select('id, created_at, content, is_active')
+          .order('created_at', { ascending: false });
+        
+        if (errorBasic) throw errorBasic;
+        
+        // 为每个项目添加默认字段
+        data = dataBasic?.map(item => ({ 
+          ...item, 
+          author: null,
+          type: 'message',
+          likes: 0,
+          comments: []
+        })) || [];
+      } else {
+        // 为每个项目添加缺失的新字段
+        data = dataPartial?.map(item => ({ 
+          ...item,
+          type: item.type || 'message',
+          likes: item.likes || 0,
+          comments: item.comments || []
+        })) || [];
+      }
+    } else if (data) {
+      // 确保所有字段都有默认值
+      data = data.map(item => ({
+        ...item,
+        type: item.type || 'message',
+        likes: item.likes || 0,
+        comments: item.comments || []
+      }));
     }
     
     return NextResponse.json({ items: data || [] });
@@ -39,20 +68,23 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { content, author, is_active } = await req.json();
+    const { content, author, is_active, type, likes, comments } = await req.json();
     if (!content || typeof content !== 'string') {
       return NextResponse.json({ error: 'content 必填' }, { status: 400 });
     }
     
     const supabase = getClient();
     
-    // 先尝试包含author字段的插入
+    // 构建插入数据，包含所有新字段
     let insertData: any = { 
       content, 
-      is_active: is_active !== false
+      is_active: is_active !== false,
+      type: type || 'message',
+      likes: likes || 0,
+      comments: comments || []
     };
     
-    // 如果有author，先尝试包含它
+    // 如果有author，添加它
     if (author && typeof author === 'string' && author.trim()) {
       insertData.author = author.trim();
     }
@@ -64,20 +96,40 @@ export async function POST(req: NextRequest) {
       .insert(insertData);
       
     if (error) {
-      // 如果author字段不存在，回退到不包含author的插入
-      if (error.message.includes('author')) {
-        console.log('author字段不存在，使用基础字段插入');
-        const basicData = { content, is_active: is_active !== false };
+      // 如果新字段不存在，逐步回退
+      if (error.message.includes('type') || error.message.includes('likes') || error.message.includes('comments')) {
+        console.log('新字段不存在，使用基础字段插入');
+        const basicData: any = { 
+          content, 
+          is_active: is_active !== false 
+        };
+        
+        // 尝试包含author字段
+        if (author && typeof author === 'string' && author.trim()) {
+          basicData.author = author.trim();
+        }
+        
         const { error: retryError } = await supabase
           .from('announcements')
           .insert(basicData);
-        if (retryError) throw retryError;
+          
+        if (retryError) {
+          // 如果author也不存在，使用最基础的字段
+          if (retryError.message.includes('author')) {
+            const minimalData = { content, is_active: is_active !== false };
+            const { error: minimalError } = await supabase
+              .from('announcements')
+              .insert(minimalData);
+            if (minimalError) throw minimalError;
+          } else {
+            throw retryError;
+          }
+        }
         
-        // 成功插入，但提醒需要添加author字段
-        console.log('插入成功，但author字段未保存');
+        console.log('插入成功，但部分字段未保存');
         return NextResponse.json({ 
           success: true, 
-          warning: '发布成功，但发布人信息未保存。请联系管理员添加author字段。' 
+          warning: '发布成功，但部分新功能字段未保存。' 
         });
       } else {
         throw error;
@@ -93,13 +145,16 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { id, content, author, is_active } = await req.json();
+    const { id, content, author, is_active, type, likes, comments } = await req.json();
     if (!id) return NextResponse.json({ error: 'id 必填' }, { status: 400 });
     
     const supabase = getClient();
     let updateData: any = {};
     if (content !== undefined) updateData.content = content;
     if (is_active !== undefined) updateData.is_active = is_active;
+    if (type !== undefined) updateData.type = type;
+    if (likes !== undefined) updateData.likes = likes;
+    if (comments !== undefined) updateData.comments = comments;
     
     // 尝试包含author字段
     if (author !== undefined) {
@@ -114,23 +169,40 @@ export async function PATCH(req: NextRequest) {
       .eq('id', id);
       
     if (error) {
-      // 如果author字段不存在，回退到不包含author的更新
-      if (error.message.includes('author')) {
-        console.log('author字段不存在，使用基础字段更新');
+      // 如果新字段不存在，回退到基础字段更新
+      if (error.message.includes('type') || error.message.includes('likes') || error.message.includes('comments')) {
+        console.log('新字段不存在，使用基础字段更新');
         const basicUpdateData: any = {};
         if (content !== undefined) basicUpdateData.content = content;
         if (is_active !== undefined) basicUpdateData.is_active = is_active;
+        if (author !== undefined) basicUpdateData.author = author;
         
         const { error: retryError } = await supabase
           .from('announcements')
           .update(basicUpdateData)
           .eq('id', id);
-        if (retryError) throw retryError;
+          
+        if (retryError) {
+          // 如果author也不存在，使用最基础的字段
+          if (retryError.message.includes('author')) {
+            const minimalUpdateData: any = {};
+            if (content !== undefined) minimalUpdateData.content = content;
+            if (is_active !== undefined) minimalUpdateData.is_active = is_active;
+            
+            const { error: minimalError } = await supabase
+              .from('announcements')
+              .update(minimalUpdateData)
+              .eq('id', id);
+            if (minimalError) throw minimalError;
+          } else {
+            throw retryError;
+          }
+        }
         
-        console.log('更新成功，但author字段未保存');
+        console.log('更新成功，但部分字段未保存');
         return NextResponse.json({ 
           success: true, 
-          warning: '更新成功，但发布人信息未保存。请联系管理员添加author字段。' 
+          warning: '更新成功，但部分新功能字段未保存。' 
         });
       } else {
         throw error;
