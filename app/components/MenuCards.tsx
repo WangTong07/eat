@@ -339,7 +339,7 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
                   backgroundImage: `url(${finalBackgroundImage})`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
-                  height: '150px'
+                  height: '180px'
                 }}
               >
                 {/* 渐变遮罩层 */}
@@ -350,7 +350,7 @@ export default function MenuCards({ preview = false }: { preview?: boolean }) {
                   {/* 菜品标题区域 */}
                   <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center">
-                      <h3 className="font-bold text-white text-sm drop-shadow-lg">{r.dish}</h3>
+                      <h3 className="font-bold text-white text-base drop-shadow-lg">{r.dish}</h3>
                     </div>
                     <span className="bg-emerald-500/80 backdrop-blur-sm text-white border border-emerald-400/50 px-1.5 py-0.5 rounded-full text-xs font-semibold shadow-lg">推荐</span>
                   </div>
