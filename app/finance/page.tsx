@@ -885,7 +885,7 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
                       <input
                         type="number"
                         step="0.01"
-                        className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 w-24 text-center text-sm font-mono focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200"
+                        className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 w-24 text-center text-sm font-mono focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                         value={localAmounts[m.id] ?? (rec.amount ?? '')}
                         placeholder="金额"
                         onChange={(e)=>{
