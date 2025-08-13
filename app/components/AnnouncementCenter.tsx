@@ -636,7 +636,7 @@ export default function AnnouncementCenter() {
                 className={`
                   ${getCardStyle(announcement, index)}
                   backdrop-blur-sm rounded-lg p-3 shadow-lg hover:shadow-xl transition-all duration-300
-                  border border-white/10 hover:border-white/20 transform hover:scale-105
+                  border border-white/10 hover:border-white/20
                 `}
               >
                 {/* 编辑表单 */}
