@@ -33,18 +33,19 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
 
   const monthOptions = generateMonthOptions();
 
-  // 获取选中月份周围的6个月数据（优化版：单次查询）
+  // 获取选中月份周围的4个月数据（选中月份居中）
   useEffect(() => {
     const fetchMonthlyData = async () => {
       try {
         setLoading(true);
         const supabase = getSupabaseClient();
         
-        // 生成选中月份前后6个月的月份列表
+        // 生成选中月份前后4个月的月份列表（选中月份居中）
         const months: string[] = [];
         const selectedDate = new Date(selectedMonth + '-01');
         
-        for (let i = 5; i >= 0; i--) {
+        // 前2个月，选中月份，后1个月
+        for (let i = 2; i >= -1; i--) {
           const date = new Date(selectedDate);
           date.setMonth(date.getMonth() - i);
           const monthStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -84,16 +85,18 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
           const amount = Number(expense.amount) || 0;
           
           if (monthlyMap.has(monthKey)) {
-            monthlyMap.set(monthKey, monthlyMap.get(monthKey)! + amount);
+            const currentAmount = monthlyMap.get(monthKey) || 0;
+            monthlyMap.set(monthKey, currentAmount + amount);
           }
         });
 
         // 转换为数组格式
         const monthlyAmounts: MonthlyData[] = months.map(month => {
           const [year, monthNum] = month.split('-').map(v => parseInt(v));
+          const amount = monthlyMap.get(month) || 0;
           return {
             month,
-            amount: monthlyMap.get(month) || 0,
+            amount,
             displayName: `${monthNum}月`
           };
         });
@@ -162,7 +165,7 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
     const changePercent = lastMonthAmount > 0 ? (changeAmount / lastMonthAmount) * 100 : 0;
     
     // 计算最大值用于图表缩放
-    const maxAmount = Math.max(...amounts, selectedAmount);
+    const maxAmount = Math.max(...amounts.filter(a => a > 0), 1); // 只考虑大于0的值
     
     return {
       selectedAmount,
@@ -257,22 +260,34 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
 
       {/* 最近6个月趋势图 */}
       <div className="space-y-2">
-        <div className="text-sm text-gray-400 font-medium">最近6个月趋势:</div>
+        <div className="text-sm text-gray-400 font-medium">最近4个月趋势: (v23:35)</div>
         <div className="flex items-end justify-between gap-1 h-16 bg-gray-800/30 rounded-lg p-2">
           {monthlyData.map((data, index) => {
             const isSelectedMonth = data.month === selectedMonth;
             const amount = data.amount;
-            const height = stats?.maxAmount ? (amount / stats.maxAmount) * 100 : 0;
+            
+            // 线性比例高度，消除对数压缩，增强对比
+            let finalHeight = '2px'; // 默认最小像素线
+            let minHeight = '2px';
+            
+            if (stats?.maxAmount && stats.maxAmount > 0 && amount > 0) {
+              const ratio = Math.min(1, Math.max(0, amount / stats.maxAmount));
+              const percent = ratio * 100;
+              finalHeight = `${percent}%`;
+            }
             
             return (
-              <div key={data.month} className="flex flex-col items-center gap-1 flex-1">
+              <div key={data.month} className="flex flex-col items-center gap-1 flex-1" style={{ height: '100%' }}>
                 <div 
                   className={`w-full rounded-sm transition-all duration-300 ${
                     isSelectedMonth 
                       ? 'bg-gradient-to-t from-blue-500 to-blue-400 shadow-md' 
                       : 'bg-gradient-to-t from-purple-600/60 to-pink-600/60'
                   }`}
-                  style={{ height: `${Math.max(height, 2)}%` }}
+                  style={{ 
+                    height: finalHeight,
+                    minHeight: minHeight
+                  }}
                   title={`${data.displayName}: ¥${amount.toLocaleString('zh-CN')}`}
                 ></div>
                 <div className={`text-xs font-medium ${

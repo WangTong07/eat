@@ -62,19 +62,21 @@ export default function FinancePage(){
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
       const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
       
+      // 只查询 date 和 amount，然后在前端计算周数
       const { data, error } = await supabase
         .from('expenses')
-        .select('week_number, amount')
+        .select('date, amount')
         .gte('date', startDate)
         .lte('date', endDate);
       
       if (error) throw error;
       
-      // 按周数汇总
+      // 按周数汇总（在前端计算周数）
       const weekMap: Record<number, number> = {};
       (data || []).forEach(item => {
-        if (item.week_number) {
-          weekMap[item.week_number] = (weekMap[item.week_number] || 0) + Number(item.amount || 0);
+        if (item.date) {
+          const weekNumber = isoWeekNumberFromString(item.date);
+          weekMap[weekNumber] = (weekMap[weekNumber] || 0) + Number(item.amount || 0);
         }
       });
       
