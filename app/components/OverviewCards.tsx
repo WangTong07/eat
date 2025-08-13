@@ -21,9 +21,8 @@ export default function OverviewCards() {
   const [headcount, setHeadcount] = useState<number>(5);
   const [editingHeadcount, setEditingHeadcount] = useState<boolean>(false);
   const [baseDate, setBaseDate] = useState<Date>(() => {
-    if (typeof window === "undefined") return new Date();
-    const saved = window.localStorage.getItem("dashboard-base-date");
-    return saved ? new Date(saved) : new Date();
+    // 始终使用当前日期作为默认值，确保日期选择器显示今天
+    return new Date();
   });
 
   const currentWeekNumber = useMemo(() => {
