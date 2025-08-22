@@ -32,9 +32,10 @@ export default function FinancePage(){
   const getCycleRange = useCallback((yearMonth: string) => {
     const [year, month] = yearMonth.split('-').map(v => parseInt(v));
     
-    // 当前周期：上月21号 - 本月20号
-    const startDate = new Date(year, month - 2, 21); // month-2 因为Date构造函数月份从0开始，所以-2表示上月
-    const endDate = new Date(year, month - 1, 20);   // month-1 表示本月
+    // 修复：21号周期应该是本月21号到次月20号
+    // 如果用户选择"2025-08"，应该查询2025年8月21号到2025年9月20号的数据
+    const startDate = new Date(year, month - 1, 21); // month-1 表示本月21号
+    const endDate = new Date(year, month, 20);       // month 表示次月20号
     
     return {
       startDate: startDate.toISOString().slice(0, 10),
@@ -548,9 +549,10 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
   const getCycleRange = useCallback((yearMonth: string) => {
     const [year, month] = yearMonth.split('-').map(v => parseInt(v));
     
-    // 当前周期：上月21号 - 本月20号
-    const startDate = new Date(year, month - 2, 21); // month-2 因为Date构造函数月份从0开始，所以-2表示上月
-    const endDate = new Date(year, month - 1, 20);   // month-1 表示本月
+    // 修复：21号周期应该是本月21号到次月20号
+    // 如果用户选择"2025-08"，应该查询2025年8月21号到2025年9月20号的数据
+    const startDate = new Date(year, month - 1, 21); // month-1 表示本月21号
+    const endDate = new Date(year, month, 20);       // month 表示次月20号
     
     return {
       startDate: startDate.toISOString().slice(0, 10),

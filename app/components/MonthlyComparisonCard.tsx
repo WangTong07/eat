@@ -105,7 +105,11 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
           const periodEnd = new Date(periodStart.getFullYear(), periodStart.getMonth() + 1, 20);
           
           const periodId = formatPeriodId(periodStart);
-          const displayName = `${periodStart.getMonth() + 1}.21-${periodEnd.getMonth() + 1}.20`;
+          
+          // 修复显示名称：确保跨月显示正确
+          const startMonth = periodStart.getMonth() + 1;
+          const endMonth = periodEnd.getMonth() + 1;
+          const displayName = `${startMonth}.21-${endMonth}.20`;
           
           periods.push({
             id: periodId,
