@@ -683,9 +683,10 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
           ></div>
         </div>
         
-        {/* 结余显示 - 深色主题 */}
-        <div className={`text-sm font-semibold ${remainingBudget >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-          {remainingBudget >= 0 ? '✅ 结余' : '⚠️ 超支'}: ¥{Math.abs(remainingBudget).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+        {/* 结余显示 - 深色主题，加大字体 */}
+        <div className={`${remainingBudget >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <span className="text-2xl font-bold">{remainingBudget >= 0 ? '✅ 结余' : '⚠️ 超支'}: </span>
+          <span className="text-3xl font-bold">¥{Math.abs(remainingBudget).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</span>
         </div>
       </div>
 
