@@ -1,5 +1,5 @@
 // 自动执行固定支出的工具函数
-export async function autoExecuteRecurringExpenses(currentCycle: string) {
+export async function autoExecuteRecurringExpenses(currentCycle: string, onSuccess?: () => void) {
   try {
     const response = await fetch(`/api/recurring-expenses?action=check_and_execute&cycle=${currentCycle}`);
     const data = await response.json();
@@ -8,6 +8,15 @@ export async function autoExecuteRecurringExpenses(currentCycle: string) {
       const addedCount = data.results?.filter((r: any) => r.status === 'added').length || 0;
       if (addedCount > 0) {
         console.log(`[自动固定支出] 本周期新增 ${addedCount} 项固定支出`);
+        
+        // 如果有新增的固定支出，触发回调通知组件更新
+        if (onSuccess) {
+          // 延迟一点执行，确保数据库操作完成
+          setTimeout(() => {
+            onSuccess();
+          }, 100);
+        }
+        
         return { success: true, addedCount, results: data.results };
       }
     }

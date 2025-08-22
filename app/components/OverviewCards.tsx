@@ -36,13 +36,64 @@ export default function OverviewCards() {
     return d.getUTCFullYear() * 100 + week;
   }, [baseDate]);
 
+  // 数据加载函数
+  const loadFinancialData = async () => {
+    const supabase = getSupabaseClient();
+    
+    // 获取当前周期支出数据（21号-次月20号）
+    const { periodStart, periodEnd } = getBillingPeriod(baseDate);
+    const periodStartStr = periodStart.toISOString().slice(0, 10);
+    const periodEndStr = periodEnd.toISOString().slice(0, 10);
+    
+    const { data: exp } = await supabase
+      .from("expenses")
+      .select("amount, date")
+      .gte("date", periodStartStr)
+      .lte("date", periodEndStr);
+    setMonthlyExpense((exp ?? []).reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0));
+
+    // 获取当前周期预算数据（缴费总额）
+    try {
+      const y = baseDate.getFullYear();
+      const m = baseDate.getMonth() + 1;
+      const [payRes, memRes] = await Promise.all([
+        fetch(`/api/members/pay?year=${y}&month=${m}`),
+        fetch('/api/members')
+      ]);
+      const pay = await payRes.json();
+      const mem = await memRes.json();
+      
+      const members = mem.items || [];
+      const payments = pay.items || [];
+      
+      // 创建缴费状态映射
+      const paymentMap: Record<string, any> = {};
+      payments.forEach((p: any) => {
+        paymentMap[p.member_id] = p;
+      });
+      
+      // 计算总预算（所有已缴费金额之和）
+      const budget = members.reduce((sum: number, member: any) => {
+        const payment = paymentMap[member.id];
+        return sum + (payment && payment.paid && payment.amount ? Number(payment.amount) : 0);
+      }, 0);
+      
+      setMonthlyBudget(budget);
+    } catch {
+      setMonthlyBudget(0);
+    }
+  };
+
   useEffect(() => {
     const supabase = getSupabaseClient();
     (async () => {
-      // 首先自动执行固定支出
+      // 首先自动执行固定支出，如果有新增则重新加载财务数据
       try {
         const currentCycle = getCurrentCycle();
-        await autoExecuteRecurringExpenses(currentCycle);
+        await autoExecuteRecurringExpenses(currentCycle, () => {
+          // 固定支出执行成功后，立即重新加载财务数据
+          loadFinancialData();
+        });
       } catch (error) {
         console.error('自动执行固定支出失败:', error);
       }
@@ -76,49 +127,8 @@ export default function OverviewCards() {
         setOnDuty('');
       }
 
-      // 获取当前周期支出数据（21号-次月20号）
-      const { periodStart, periodEnd } = getBillingPeriod(baseDate);
-      const periodStartStr = periodStart.toISOString().slice(0, 10);
-      const periodEndStr = periodEnd.toISOString().slice(0, 10);
-      
-      const { data: exp } = await supabase
-        .from("expenses")
-        .select("amount, date")
-        .gte("date", periodStartStr)
-        .lte("date", periodEndStr);
-      setMonthlyExpense((exp ?? []).reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0));
-
-      // 获取当前周期预算数据（缴费总额）
-      // 注意：预算仍按自然月计算，因为缴费通常按自然月进行
-      try {
-        const y = baseDate.getFullYear();
-        const m = baseDate.getMonth() + 1;
-        const [payRes, memRes] = await Promise.all([
-          fetch(`/api/members/pay?year=${y}&month=${m}`),
-          fetch('/api/members')
-        ]);
-        const pay = await payRes.json();
-        const mem = await memRes.json();
-        
-        const members = mem.items || [];
-        const payments = pay.items || [];
-        
-        // 创建缴费状态映射
-        const paymentMap: Record<string, any> = {};
-        payments.forEach((p: any) => {
-          paymentMap[p.member_id] = p;
-        });
-        
-        // 计算总预算（所有已缴费金额之和）
-        const budget = members.reduce((sum: number, member: any) => {
-          const payment = paymentMap[member.id];
-          return sum + (payment && payment.paid && payment.amount ? Number(payment.amount) : 0);
-        }, 0);
-        
-        setMonthlyBudget(budget);
-      } catch {
-        setMonthlyBudget(0);
-      }
+      // 初始加载财务数据
+      await loadFinancialData();
 
       // 读取可编辑的"吃饭人数"（若后端存在 app_settings 表，则以该表优先）
       try {

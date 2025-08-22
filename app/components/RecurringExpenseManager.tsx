@@ -51,9 +51,10 @@ export default function RecurringExpenseManager({ currentCycle, onExpenseAdded }
       if (data.success) {
         setAutoExecuteResult(data);
         
-        // 如果有新添加的支出，通知父组件刷新
+        // 如果有新添加的支出，立即通知父组件刷新
         const addedCount = data.results?.filter((r: any) => r.status === 'added').length || 0;
         if (addedCount > 0 && onExpenseAdded) {
+          // 立即执行回调，不延迟
           onExpenseAdded();
         }
       }

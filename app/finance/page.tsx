@@ -44,13 +44,20 @@ export default function FinancePage(){
     };
   }, []);
 
-  const fetchList = useCallback(async () => {
+  const fetchList = useCallback(async (skipAutoExecute = false) => {
     try {
-      // 首先自动执行固定支出
-      try {
-        await autoExecuteRecurringExpenses(ym);
-      } catch (error) {
-        console.error('自动执行固定支出失败:', error);
+      // 首先自动执行固定支出（除非明确跳过）
+      if (!skipAutoExecute) {
+        try {
+          const result = await autoExecuteRecurringExpenses(ym, () => {
+            // 固定支出执行成功后，立即重新加载数据（跳过自动执行避免循环）
+            fetchList(true);
+            fetchWeekly();
+            setPayRefreshKey(k => k + 1);
+          });
+        } catch (error) {
+          console.error('自动执行固定支出失败:', error);
+        }
       }
 
       const supabase = getSupabaseClient();
