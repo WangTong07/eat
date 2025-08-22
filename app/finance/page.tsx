@@ -5,6 +5,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 import MonthlyComparisonCard from "../components/MonthlyComparisonCard";
 import RecurringExpenseManager from "../components/RecurringExpenseManager";
+import { autoExecuteRecurringExpenses, getCurrentCycle } from "@/app/lib/autoRecurringExpenses";
 
 // 固定月费（按工作日分摊）
 const MONTH_PRICE = 920;
@@ -45,6 +46,13 @@ export default function FinancePage(){
 
   const fetchList = useCallback(async () => {
     try {
+      // 首先自动执行固定支出
+      try {
+        await autoExecuteRecurringExpenses(ym);
+      } catch (error) {
+        console.error('自动执行固定支出失败:', error);
+      }
+
       const supabase = getSupabaseClient();
       const { startDate, endDate } = getCycleRange(ym);
       

@@ -11,9 +11,10 @@ function getClient() {
 function getCycleRange(yearMonth: string) {
   const [year, month] = yearMonth.split('-').map(v => parseInt(v));
   
-  // 当前周期：上月21号 - 本月20号
-  const startDate = new Date(year, month - 2, 21);
-  const endDate = new Date(year, month - 1, 20);
+  // 修复：21号周期应该是本月21号到次月20号
+  // 如果用户选择"2025-08"，应该查询2025年8月21号到2025年9月20号的数据
+  const startDate = new Date(year, month - 1, 21); // month-1 表示本月21号
+  const endDate = new Date(year, month, 20);       // month 表示次月20号
   
   return {
     startDate: startDate.toISOString().slice(0, 10),
@@ -73,14 +74,13 @@ export async function GET(req: NextRequest) {
         if (!execution) {
           // 还没有执行过，创建支出记录
           const expenseDate = startDate; // 在周期开始日期添加
-          const weekNumber = isoWeekNumber(new Date(expenseDate));
           
-          // 创建支出记录
+          // 创建支出记录，直接写入expenses表，确保所有统计都能包含
           const { data: expense, error: expenseError } = await supabase
             .from('expenses')
             .insert({
               date: expenseDate,
-              item_description: `${recurring.name} (自动添加)`,
+              item_description: `${recurring.name}${recurring.description ? ` - ${recurring.description}` : ''} (自动添加)`,
               amount: recurring.amount,
               user_name: '系统自动',
               is_recurring: true,
@@ -100,14 +100,15 @@ export async function GET(req: NextRequest) {
             continue;
           }
           
-          // 记录执行状态
+          // 记录执行状态，用于防重复执行
           const { error: executionInsertError } = await supabase
             .from('recurring_expense_executions')
             .insert({
               recurring_expense_id: recurring.id,
               cycle_year: year,
               cycle_month: month,
-              expense_id: expense.id
+              expense_id: expense.id,
+              executed_at: new Date().toISOString()
             });
           
           if (executionInsertError) {

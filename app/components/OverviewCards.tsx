@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { autoExecuteRecurringExpenses, getCurrentCycle } from "@/app/lib/autoRecurringExpenses";
 
 type Plan = {
   id: string;
@@ -38,6 +39,14 @@ export default function OverviewCards() {
   useEffect(() => {
     const supabase = getSupabaseClient();
     (async () => {
+      // 首先自动执行固定支出
+      try {
+        const currentCycle = getCurrentCycle();
+        await autoExecuteRecurringExpenses(currentCycle);
+      } catch (error) {
+        console.error('自动执行固定支出失败:', error);
+      }
+
       const { data: p } = await supabase
         .from("weekly_plans")
         .select("id, week_number, generated_at, menu_json, shopping_list_json")
