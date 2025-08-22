@@ -83,7 +83,6 @@ export async function GET(req: NextRequest) {
               item_description: `${recurring.name} (自动添加)`,
               amount: recurring.amount,
               user_name: '系统自动',
-              week_number: weekNumber,
               is_recurring: true,
               recurring_expense_id: recurring.id
             })
