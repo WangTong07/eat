@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 import MonthlyComparisonCard from "../components/MonthlyComparisonCard";
+import RecurringExpenseManager from "../components/RecurringExpenseManager";
 
 // 固定月费（按工作日分摊）
 const MONTH_PRICE = 920;
@@ -302,6 +303,15 @@ export default function FinancePage(){
         />
       </div>
 
+      <RecurringExpenseManager 
+        currentCycle={ym} 
+        onExpenseAdded={() => {
+          fetchList();
+          fetchWeekly();
+          setPayRefreshKey(k => k + 1);
+        }} 
+      />
+
       <div className="bg-gradient-to-br from-emerald-900/30 to-teal-900/30 border border-emerald-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md">
@@ -533,6 +543,20 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
   const [details, setDetails] = useState<Array<{name:string; paid:boolean; amount?:number}>>([]);
   const [open, setOpen] = useState(false);
   const [totalBudget, setTotalBudget] = useState(0);
+
+  // 21号周期计算辅助函数
+  const getCycleRange = useCallback((yearMonth: string) => {
+    const [year, month] = yearMonth.split('-').map(v => parseInt(v));
+    
+    // 当前周期：上月21号 - 本月20号
+    const startDate = new Date(year, month - 2, 21); // month-2 因为Date构造函数月份从0开始，所以-2表示上月
+    const endDate = new Date(year, month - 1, 20);   // month-1 表示本月
+    
+    return {
+      startDate: startDate.toISOString().slice(0, 10),
+      endDate: endDate.toISOString().slice(0, 10)
+    };
+  }, []);
 
   useEffect(()=>{
     (async()=>{
