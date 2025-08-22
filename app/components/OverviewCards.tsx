@@ -67,21 +67,23 @@ export default function OverviewCards() {
         setOnDuty('');
       }
 
-      // 获取本月支出数据
-      const y = baseDate.getFullYear();
-      const m = baseDate.getMonth() + 1;
-      const monthStart = `${y}-${String(m).padStart(2, '0')}-01`;
-      const monthEnd = new Date(y, m, 0).toISOString().slice(0, 10);
+      // 获取当前周期支出数据（21号-次月20号）
+      const { periodStart, periodEnd } = getBillingPeriod(baseDate);
+      const periodStartStr = periodStart.toISOString().slice(0, 10);
+      const periodEndStr = periodEnd.toISOString().slice(0, 10);
       
       const { data: exp } = await supabase
         .from("expenses")
         .select("amount, date")
-        .gte("date", monthStart)
-        .lte("date", monthEnd);
+        .gte("date", periodStartStr)
+        .lte("date", periodEndStr);
       setMonthlyExpense((exp ?? []).reduce((sum: number, e: any) => sum + Number(e.amount || 0), 0));
 
-      // 获取本月预算数据（缴费总额）
+      // 获取当前周期预算数据（缴费总额）
+      // 注意：预算仍按自然月计算，因为缴费通常按自然月进行
       try {
+        const y = baseDate.getFullYear();
+        const m = baseDate.getMonth() + 1;
         const [payRes, memRes] = await Promise.all([
           fetch(`/api/members/pay?year=${y}&month=${m}`),
           fetch('/api/members')
@@ -325,7 +327,7 @@ export default function OverviewCards() {
         <Link href="/finance" className="group bg-gradient-to-br from-cyan-900/30 to-blue-900/30 border border-cyan-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 block animate-slide-up" style={{ animationDelay: "0.4s" }}>
           <div className="flex items-start justify-between">
             <div className="flex-1">
-              <p className="text-cyan-400/70 text-sm font-medium mb-2">本月预算</p>
+              <p className="text-cyan-400/70 text-sm font-medium mb-2">当前周期预算</p>
               <h3 className="text-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent mb-3">
                 ¥{monthlyExpense.toFixed(0)} / ¥{monthlyBudget.toFixed(0)}
               </h3>
@@ -391,6 +393,43 @@ function weekOfMonth(d: Date) {
   const start = new Date(date.getFullYear(), date.getMonth(), 1);
   const diff = date.getDate() + start.getDay() - 1;
   return Math.floor(diff / 7) + 1;
+}
+
+// 获取基于21号周期的月度范围
+function getBillingPeriod(date: Date) {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const day = date.getDate();
+  
+  let periodStart: Date;
+  let periodEnd: Date;
+  
+  if (day >= 21) {
+    // 当前日期在21号及以后，周期是当月21号到次月20号
+    periodStart = new Date(year, month, 21);
+    periodEnd = new Date(year, month + 1, 20);
+  } else {
+    // 当前日期在20号及以前，周期是上月21号到当月20号
+    periodStart = new Date(year, month - 1, 21);
+    periodEnd = new Date(year, month, 20);
+  }
+  
+  return { periodStart, periodEnd };
+}
+
+// 格式化周期显示文本
+function formatBillingPeriod(date: Date) {
+  const { periodStart, periodEnd } = getBillingPeriod(date);
+  const startMonth = periodStart.getMonth() + 1;
+  const endMonth = periodEnd.getMonth() + 1;
+  const startYear = periodStart.getFullYear();
+  const endYear = periodEnd.getFullYear();
+  
+  if (startYear === endYear) {
+    return `${startYear}年${startMonth}.21-${endMonth}.20`;
+  } else {
+    return `${startYear}.${startMonth}.21-${endYear}.${endMonth}.20`;
+  }
 }
 
 

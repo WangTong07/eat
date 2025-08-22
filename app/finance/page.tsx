@@ -27,12 +27,24 @@ export default function FinancePage(){
   const [items,setItems]=useState<Expense[]>([]);
   const [weekly,setWeekly]=useState<Array<{week_number:number,amount_sum:number}>>([]);
 
+  // 21号周期计算辅助函数
+  const getCycleRange = useCallback((yearMonth: string) => {
+    const [year, month] = yearMonth.split('-').map(v => parseInt(v));
+    
+    // 当前周期：上月21号 - 本月20号
+    const startDate = new Date(year, month - 2, 21); // month-2 因为Date构造函数月份从0开始，所以-2表示上月
+    const endDate = new Date(year, month - 1, 20);   // month-1 表示本月
+    
+    return {
+      startDate: startDate.toISOString().slice(0, 10),
+      endDate: endDate.toISOString().slice(0, 10)
+    };
+  }, []);
+
   const fetchList = useCallback(async () => {
     try {
       const supabase = getSupabaseClient();
-      const [year, month] = ym.split('-').map(v => parseInt(v));
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
+      const { startDate, endDate } = getCycleRange(ym);
       
       const { data, error } = await supabase
         .from('expenses')
@@ -54,13 +66,11 @@ export default function FinancePage(){
       console.error('获取支出记录失败:', error);
       setItems([]);
     }
-  }, [ym]);
+  }, [ym, getCycleRange]);
   const fetchWeekly = useCallback(async () => {
     try {
       const supabase = getSupabaseClient();
-      const [year, month] = ym.split('-').map(v => parseInt(v));
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = new Date(year, month, 0).toISOString().slice(0, 10);
+      const { startDate, endDate } = getCycleRange(ym);
       
       // 只查询 date 和 amount，然后在前端计算周数
       const { data, error } = await supabase
@@ -90,9 +100,9 @@ export default function FinancePage(){
       console.error('获取周汇总失败:', error);
       setWeekly([]);
     }
-  }, [ym]);
+  }, [ym, getCycleRange]);
 
-  useEffect(()=>{ fetchList(); fetchWeekly(); },[fetchList, ym]);
+  useEffect(()=>{ fetchList(); fetchWeekly(); },[fetchList, fetchWeekly]);
 
   // 添加实时订阅
   useRealtimeSubscription({
@@ -140,18 +150,23 @@ export default function FinancePage(){
     }, 0);
   }, [items, currentWeekNumber]);
 
-  // 以客户端数据即时计算"本月每周支出汇总"（避免 Cookie 被浏览器拦截导致为空）
+  // 以客户端数据即时计算"本周期每周支出汇总"（21号周期内的数据）
   const weeklyView = useMemo(() => {
     const map: Record<string, number> = {};
+    const { startDate, endDate } = getCycleRange(ym);
+    
     items.forEach((it) => {
-      if (!it?.date || !String(it.date).startsWith(ym + '-')) return;
-      const wk = isoWeekNumberFromString(it.date);
-      map[wk] = (map[wk] || 0) + Number(it.amount || 0);
+      if (!it?.date) return;
+      // 检查日期是否在当前21号周期内
+      if (it.date >= startDate && it.date <= endDate) {
+        const wk = isoWeekNumberFromString(it.date);
+        map[wk] = (map[wk] || 0) + Number(it.amount || 0);
+      }
     });
     return Object.keys(map)
       .sort()
       .map((k) => ({ week_number: Number(k), amount_sum: map[k] }));
-  }, [items, ym]);
+  }, [items, ym, getCycleRange]);
 
   // 将 ISO 周编号转换为"几月几号-几号"的显示
   function isoWeekRangeLabel(weekNumber: number): string {
@@ -293,7 +308,7 @@ export default function FinancePage(){
             <span className="text-white text-lg">📊</span>
           </div>
           <div className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-            本月每周支出汇总
+            本周期每周支出汇总 (21号-20号)
           </div>
         </div>
         <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg border border-emerald-700/30 overflow-hidden">
@@ -578,10 +593,13 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
     })();
   },[ym, refreshKey, onBudgetChange]);
 
-  // 计算本月支出总额
-  const monthlySpend = expenseItems
-    .filter(e=> typeof e.date==='string' && e.date.startsWith(ym+'-'))
-    .reduce((s,e)=> s + Number(e.amount||0), 0);
+  // 计算本周期支出总额（21号周期）
+  const monthlySpend = useMemo(() => {
+    const { startDate, endDate } = getCycleRange(ym);
+    return expenseItems
+      .filter(e => typeof e.date === 'string' && e.date >= startDate && e.date <= endDate)
+      .reduce((s, e) => s + Number(e.amount || 0), 0);
+  }, [expenseItems, ym, getCycleRange]);
 
   // 计算结余
   const remainingBudget = totalBudget - monthlySpend;
@@ -593,7 +611,7 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
     <div className="bg-gradient-to-br from-blue-900/30 via-indigo-900/30 to-purple-900/30 border border-blue-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-          💰 本月预算概览
+          💰 本周期预算概览 (21号-20号)
         </div>
         <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
           <span className="text-white text-lg">💎</span>
@@ -667,7 +685,7 @@ function PayStatsCard({ onChange }: { onChange?: ()=>void }){
             <span className="text-white text-lg">👥</span>
           </div>
           <div className="text-xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-            成员缴费统计（本月）
+            成员缴费统计（本周期 21号-20号）
           </div>
         </div>
         <div className="flex items-center gap-2 bg-gray-800/70 backdrop-blur-sm px-4 py-2 rounded-lg border border-cyan-700/30 group-hover:border-cyan-600/50 transition-all duration-200">
