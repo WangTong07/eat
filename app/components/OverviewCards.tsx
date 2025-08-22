@@ -364,6 +364,11 @@ export default function OverviewCards() {
                   }}
                 ></div>
               </div>
+              {/* 结余显示 - 加大字体 */}
+              <div className="mb-2">
+                <span className="text-green-400 text-lg font-bold">结余: </span>
+                <span className="text-green-400 text-xl font-bold">¥{Math.max(0, monthlyBudget - monthlyExpense).toFixed(0)}</span>
+              </div>
               <p className="text-cyan-400/80 text-sm group-hover:text-cyan-300 transition-colors duration-200">
                 查看详细财务信息
               </p>
