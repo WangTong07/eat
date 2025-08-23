@@ -19,6 +19,9 @@ type PayItem = {
   coverage?: 'month' | 'range' | null;
   from_date?: string | null;
   to_date?: string | null;
+  settlement_amount?: number | null;
+  settlement_date?: string | null;
+  is_settled?: boolean;
 };
 
 export async function GET(req: NextRequest) {
@@ -32,7 +35,7 @@ export async function GET(req: NextRequest) {
     let items: Array<PayItem> = [];
     const { data, error } = await supabase
       .from("member_payments")
-      .select("member_id, year, month, paid, paid_at, amount, coverage, from_date, to_date")
+      .select("member_id, year, month, paid, paid_at, amount, coverage, from_date, to_date, settlement_amount, settlement_date, is_settled")
       .eq("year", year)
       .eq("month", month);
 
@@ -47,6 +50,9 @@ export async function GET(req: NextRequest) {
         coverage: d.coverage || null,
         from_date: d.from_date || null,
         to_date: d.to_date || null,
+        settlement_amount: typeof d.settlement_amount === 'number' ? d.settlement_amount : null,
+        settlement_date: d.settlement_date || null,
+        is_settled: !!d.is_settled,
       }));
       if (dbItems.length > 0) {
         items = dbItems;
@@ -104,6 +110,9 @@ export async function POST(req: NextRequest) {
     const coverageDef: 'month' | 'range' | null | undefined = (body?.coverage === 'range' || body?.coverage === 'month') ? body?.coverage : (body?.coverage === null ? null : undefined);
     const fromDateDef: string | null | undefined = (body?.from_date !== undefined) ? (body?.from_date || null) : undefined;
     const toDateDef: string | null | undefined = (body?.to_date !== undefined) ? (body?.to_date || null) : undefined;
+    const settlementAmountDef: number | null | undefined = (body?.settlement_amount !== undefined) ? (body?.settlement_amount === null || body?.settlement_amount === '' ? null : Number(body?.settlement_amount)) : undefined;
+    const settlementDateDef: string | null | undefined = (body?.settlement_date !== undefined) ? (body?.settlement_date || null) : undefined;
+    const isSettledDef: boolean | undefined = (body?.is_settled !== undefined) ? !!body?.is_settled : undefined;
     if (!member_id) return NextResponse.json({ error: "member_id 必填" }, { status: 400 });
 
     // 局部更新：只更新传入的字段；没有传入的保持不变
@@ -141,15 +150,49 @@ export async function POST(req: NextRequest) {
       if (coverageDef !== undefined) patch.coverage = coverageDef;
       if (fromDateDef !== undefined) patch.from_date = fromDateDef;
       if (toDateDef !== undefined) patch.to_date = toDateDef;
+      if (settlementAmountDef !== undefined) patch.settlement_amount = settlementAmountDef;
+      if (settlementDateDef !== undefined) patch.settlement_date = settlementDateDef;
+      if (isSettledDef !== undefined) patch.is_settled = isSettledDef;
       if (Object.keys(patch).length === 0) return NextResponse.json({ success: true, source: 'db', saved: { member_id, year, month } });
+      
+      // 获取当前记录的完整数据，用于返回
+      const { data: currentData, error: getErr } = await supabase
+        .from('member_payments')
+        .select('*')
+        .eq('member_id', member_id)
+        .eq('year', year)
+        .eq('month', month)
+        .single();
+        
+      if (getErr) throw getErr;
+      
       const { error: updErr } = await supabase
         .from('member_payments')
         .update(patch)
         .eq('member_id', member_id)
         .eq('year', year)
         .eq('month', month);
+        
       if (updErr) throw updErr;
-      return NextResponse.json({ success: true, source: 'db', saved: { member_id, year, month, ...patch } });
+      
+      // 更新后重新获取完整记录，确保返回最新数据
+      const { data: updatedData, error: getUpdErr } = await supabase
+        .from('member_payments')
+        .select('*')
+        .eq('member_id', member_id)
+        .eq('year', year)
+        .eq('month', month)
+        .single();
+        
+      // 如果获取更新后的数据失败，则使用合并的数据
+      const savedData = getUpdErr ? { ...currentData, ...patch } : updatedData;
+      
+      // 确保返回统一格式的响应，包含success和saved字段
+      return NextResponse.json({ 
+        success: true, 
+        source: 'db', 
+        saved: savedData 
+      });
     }
 
     // 不存在则插入新纪录，未提供的字段用默认
@@ -161,6 +204,9 @@ export async function POST(req: NextRequest) {
       coverage: coverageDef ?? null,
       from_date: fromDateDef ?? null,
       to_date: toDateDef ?? null,
+      settlement_amount: settlementAmountDef ?? null,
+      settlement_date: settlementDateDef ?? null,
+      is_settled: isSettledDef ?? false,
     };
     const { error: insErr } = await supabase.from('member_payments').insert(row);
     if (insErr) throw insErr;

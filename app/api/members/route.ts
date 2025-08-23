@@ -10,20 +10,27 @@ function getClient() {
 export async function GET() {
   try {
     const supabase = getClient();
-    // 兼容两种表名：household_members（推荐）与 house_members（你之前的）
-    let { data, error } = await supabase
-      .from("household_members")
-      .select("id, name, role, is_active, created_at")
-      .order("created_at", { ascending: false });
-    if (error) {
-      const fallback = await supabase
-        .from("house_members")
-        .select("id, name, role, is_active, created_at")
-        .order("created_at", { ascending: false });
-      if (fallback.error) throw fallback.error;
-      data = fallback.data as any;
+    // 尝试多种可能的表名
+    const tableNames = ["household_members", "house_members", "members", "people"];
+    
+    for (const tableName of tableNames) {
+      try {
+        const { data, error } = await supabase
+          .from(tableName)
+          .select("id, name, role, is_active, created_at")
+          .order("created_at", { ascending: false });
+        
+        if (!error && data) {
+          return NextResponse.json({ items: data ?? [] });
+        }
+      } catch (e) {
+        // 继续尝试下一个表名
+        continue;
+      }
     }
-    return NextResponse.json({ items: data ?? [] });
+    
+    // 如果所有表名都失败，返回空数组
+    return NextResponse.json({ items: [] });
   } catch (e: any) {
     return NextResponse.json({ items: [] });
   }

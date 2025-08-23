@@ -53,9 +53,10 @@ function formatPeriodDisplay(periodStart: Date): string {
 interface MonthlyComparisonCardProps {
   currentMonth: string; // YYYY-MM format (保持兼容性)
   currentAmount: number;
+  refreshKey?: number; // 添加刷新键，用于实时更新
 }
 
-export default function MonthlyComparisonCard({ currentMonth, currentAmount }: MonthlyComparisonCardProps) {
+export default function MonthlyComparisonCard({ currentMonth, currentAmount, refreshKey = 0 }: MonthlyComparisonCardProps) {
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState(() => {
@@ -126,14 +127,29 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
         const startDate = earliestStart.toISOString().slice(0, 10);
         const endDate = latestEnd.toISOString().slice(0, 10);
 
-        // 单次查询获取所有数据，然后按周期分组
+        console.log(`[MonthlyComparisonCard] 开始查询周期数据，时间范围: ${startDate} 到 ${endDate}`);
+        
+        // 单次查询获取所有数据（包括固定支出），然后按周期分组
         const { data, error } = await supabase
           .from('expenses')
-          .select('amount, date')
+          .select('amount, date, is_recurring, recurring_expense_id, item_description')
           .gte('date', startDate)
           .lte('date', endDate);
         
         if (error) throw error;
+        
+        console.log(`[MonthlyComparisonCard] 查询到 ${data?.length || 0} 条支出记录，时间范围: ${startDate} 到 ${endDate}`);
+        
+        // 统计固定支出和普通支出
+        const recurringExpenses = data?.filter(e => e.is_recurring) || [];
+        const normalExpenses = data?.filter(e => !e.is_recurring) || [];
+        
+        console.log(`[MonthlyComparisonCard] 固定支出: ${recurringExpenses.length}条，普通支出: ${normalExpenses.length}条`);
+        
+        // 详细记录每条固定支出
+        recurringExpenses.forEach(expense => {
+          console.log(`[MonthlyComparisonCard] 固定支出: 日期=${expense.date}, 金额=${expense.amount}, ID=${expense.recurring_expense_id}, 描述=${expense.item_description || '无'}`);
+        });
 
         // 按周期分组数据
         const periodMap = new Map<string, number>();
@@ -212,18 +228,24 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
     return () => {
       clearTimeout(timeoutId);
     };
-  }, [selectedPeriod]);
+  }, [selectedPeriod, refreshKey, currentAmount]); // 添加refreshKey和currentAmount作为依赖
 
-  // 计算统计数据
+  // 计算统计数据 - 修复版本，优先使用父组件传入的实时数据
   const stats = useMemo(() => {
     if (monthlyData.length === 0) return null;
 
     const amounts = monthlyData.map(d => d.amount);
     const selectedData = monthlyData.find(d => d.month === selectedPeriod);
-    const selectedAmount = selectedData ? selectedData.amount : 0;
+    
+    // 如果当前选中的周期对应父组件传入的当前月份，优先使用父组件的实时数据
+    const [yearStr, monthStr] = selectedPeriod.split('-');
+    const selectedPeriodYearMonth = `${yearStr}-${monthStr}`;
+    const isCurrentPeriod = selectedPeriodYearMonth === currentMonth;
+    
+    // 优先使用父组件传入的实时数据，确保显示最新的支出金额
+    const selectedAmount = isCurrentPeriod && currentAmount > 0 ? currentAmount : (selectedData ? selectedData.amount : 0);
     
     // 获取上个周期数据
-    const [yearStr, monthStr] = selectedPeriod.split('-');
     const selectedPeriodStart = new Date(parseInt(yearStr), parseInt(monthStr) - 1, 21);
     const prevPeriodStart = new Date(selectedPeriodStart);
     prevPeriodStart.setMonth(prevPeriodStart.getMonth() - 1);
@@ -235,8 +257,16 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
     const changeAmount = selectedAmount - lastPeriodAmount;
     const changePercent = lastPeriodAmount > 0 ? (changeAmount / lastPeriodAmount) * 100 : 0;
     
-    // 计算最大值用于图表缩放
-    const maxAmount = Math.max(...amounts.filter(a => a > 0), 1); // 只考虑大于0的值
+    // 计算最大值用于图表缩放，包含当前实时数据
+    const allAmounts = [...amounts];
+    if (isCurrentPeriod && currentAmount > 0) {
+      // 替换当前周期的数据为实时数据
+      const currentIndex = monthlyData.findIndex(d => d.month === selectedPeriod);
+      if (currentIndex >= 0) {
+        allAmounts[currentIndex] = currentAmount;
+      }
+    }
+    const maxAmount = Math.max(...allAmounts.filter(a => a > 0), 1); // 只考虑大于0的值
     
     return {
       selectedAmount,
@@ -245,16 +275,17 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
       changePercent,
       maxAmount,
       isIncrease: changeAmount > 0,
-      isDecrease: changeAmount < 0
+      isDecrease: changeAmount < 0,
+      isCurrentPeriod
     };
-  }, [monthlyData, selectedPeriod]);
+  }, [monthlyData, selectedPeriod, currentAmount, currentMonth]);
 
   if (loading) {
     return (
       <div className="bg-gradient-to-br from-purple-900/30 via-pink-900/30 to-indigo-900/30 border border-purple-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            📈 月度花销对比
+            📈 周期花销对比
           </div>
           <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md">
             <span className="text-white text-lg animate-pulse">📊</span>
@@ -307,6 +338,13 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
               ▼
             </div>
           </div>
+          {/* 实时数据指示器 */}
+          {stats?.isCurrentPeriod && currentAmount > 0 && (
+            <div className="flex items-center gap-1 bg-green-900/40 text-green-400 px-2 py-1 rounded-full text-xs font-medium">
+              <span className="animate-pulse">🔴</span>
+              <span>实时</span>
+            </div>
+          )}
         </div>
         
         {stats && (
@@ -332,19 +370,50 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
       {/* 最近4个周期趋势图 */}
       <div className="space-y-2">
         <div className="text-sm text-gray-400 font-medium">最近4个周期趋势: (21号周期)</div>
-        <div className="flex items-end justify-between gap-1 h-16 bg-gray-800/30 rounded-lg p-2">
+        <div className="flex items-end justify-between gap-1 h-24 bg-gray-800/30 rounded-lg p-2">
           {monthlyData.map((data, index) => {
             const isSelectedPeriod = data.month === selectedPeriod;
-            const amount = data.amount;
             
-            // 线性比例高度，消除对数压缩，增强对比
-            let finalHeight = '2px'; // 默认最小像素线
-            let minHeight = '2px';
+            // 如果是当前周期且有实时数据，使用实时数据
+            const [yearStr, monthStr] = data.month.split('-');
+            const dataYearMonth = `${yearStr}-${monthStr}`;
+            const isCurrentPeriod = dataYearMonth === currentMonth;
+            const amount = isCurrentPeriod && currentAmount > 0 ? currentAmount : data.amount;
             
-            if (stats?.maxAmount && stats.maxAmount > 0 && amount > 0) {
-              const ratio = Math.min(1, Math.max(0, amount / stats.maxAmount));
-              const percent = ratio * 100;
-              finalHeight = `${percent}%`;
+            // 改进的高度计算方式，增强视觉对比效果
+            let finalHeight = '2px'; // 默认最小高度
+            const minHeight = '2px'; // 定义最小高度变量
+            
+            if (stats?.maxAmount && stats.maxAmount > 0) {
+              if (amount > 0) {
+                // 计算所有非零值的最小值，用于动态调整基准
+                const allAmounts = monthlyData.map(d => {
+                  const [y, m] = d.month.split('-');
+                  const ym = `${y}-${m}`;
+                  return ym === currentMonth && currentAmount > 0 ? currentAmount : d.amount;
+                });
+                const nonZeroAmounts = allAmounts.filter(a => a > 0);
+                const minAmount = Math.min(...nonZeroAmounts);
+                const maxAmount = Math.max(...nonZeroAmounts);
+                const range = maxAmount - minAmount;
+                
+                // 如果差异很小（小于最大值的30%），使用增强对比模式
+                if (range < maxAmount * 0.3 && nonZeroAmounts.length > 1) {
+                  // 使用相对差异放大模式
+                  const normalizedRatio = (amount - minAmount) / range;
+                  // 使用0.6次幂增强中等差异的可见性
+                  const enhancedRatio = Math.pow(normalizedRatio, 0.6);
+                  const percent = 25 + (enhancedRatio * 70); // 25%-95%的范围
+                  finalHeight = `${percent}%`;
+                } else {
+                  // 正常线性映射模式
+                  const ratio = amount / stats.maxAmount;
+                  const percent = 10 + (ratio * 85); // 10%-95%的范围
+                  finalHeight = `${percent}%`;
+                }
+              } else {
+                finalHeight = '0%';
+              }
             }
             
             return (
@@ -353,16 +422,20 @@ export default function MonthlyComparisonCard({ currentMonth, currentAmount }: M
                   className={`w-full rounded-sm transition-all duration-300 ${
                     isSelectedPeriod 
                       ? 'bg-gradient-to-t from-blue-500 to-blue-400 shadow-md' 
+                      : isCurrentPeriod && currentAmount > 0
+                      ? 'bg-gradient-to-t from-green-500 to-green-400 shadow-md' // 实时数据用绿色
                       : 'bg-gradient-to-t from-purple-600/60 to-pink-600/60'
                   }`}
                   style={{ 
                     height: finalHeight,
-                    minHeight: minHeight
+                    minHeight: amount > 0 ? minHeight : '0px' // 确保有金额时至少有最小高度
                   }}
-                  title={`${data.displayName}: ¥${amount.toLocaleString('zh-CN')}`}
+                  title={`${data.displayName}: ¥${amount.toLocaleString('zh-CN')}${isCurrentPeriod && currentAmount > 0 ? ' (实时)' : ''}`}
                 ></div>
                 <div className={`text-xs font-medium ${
-                  isSelectedPeriod ? 'text-blue-300' : 'text-gray-500'
+                  isSelectedPeriod ? 'text-blue-300' : 
+                  isCurrentPeriod && currentAmount > 0 ? 'text-green-300' :
+                  'text-gray-500'
                 }`}>
                   {data.displayName}
                 </div>

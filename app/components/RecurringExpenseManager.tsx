@@ -27,6 +27,7 @@ export default function RecurringExpenseManager({ currentCycle, onExpenseAdded }
     is_active: true
   });
   const [autoExecuteResult, setAutoExecuteResult] = useState<any>(null);
+  const [hasExecuted, setHasExecuted] = useState(false);
 
   // 加载固定支出配置
   const loadRecurringExpenses = useCallback(async () => {
@@ -41,35 +42,61 @@ export default function RecurringExpenseManager({ currentCycle, onExpenseAdded }
     }
   }, []);
 
-  // 检查并执行固定支出
+  // 检查并执行固定支出 - 移除 onExpenseAdded 依赖避免循环
   const checkAndExecuteRecurring = useCallback(async () => {
+    if (hasExecuted) return; // 防止重复执行
+    
     try {
       setLoading(true);
+      console.log(`[RecurringExpenseManager] 开始检查固定支出，周期: ${currentCycle}`);
+      
       const response = await fetch(`/api/recurring-expenses?action=check_and_execute&cycle=${currentCycle}`);
       const data = await response.json();
       
+      console.log(`[RecurringExpenseManager] API响应:`, data);
+      
       if (data.success) {
         setAutoExecuteResult(data);
+        setHasExecuted(true); // 标记已执行
         
-        // 如果有新添加的支出，立即通知父组件刷新
+        // 统计结果
         const addedCount = data.results?.filter((r: any) => r.status === 'added').length || 0;
+        const existingCount = data.results?.filter((r: any) => r.status === 'already_exists').length || 0;
+        const errorCount = data.results?.filter((r: any) => r.status === 'error').length || 0;
+        
+        console.log(`[RecurringExpenseManager] 执行结果 - 新增: ${addedCount}, 已存在: ${existingCount}, 错误: ${errorCount}`);
+        
+        // 只在有新增时通知父组件
         if (addedCount > 0 && onExpenseAdded) {
-          // 立即执行回调，不延迟
-          onExpenseAdded();
+          console.log(`[RecurringExpenseManager] 有新增支出，触发父组件刷新回调`);
+          setTimeout(() => {
+            onExpenseAdded();
+          }, 500);
         }
+      } else {
+        console.error(`[RecurringExpenseManager] 执行失败:`, data.error);
+        setAutoExecuteResult({ success: false, error: data.error });
       }
     } catch (error) {
       console.error('执行固定支出失败:', error);
+      setAutoExecuteResult({ success: false, error: error.message });
     } finally {
       setLoading(false);
     }
-  }, [currentCycle, onExpenseAdded]);
+  }, [currentCycle, hasExecuted]); // 移除 onExpenseAdded 依赖
 
-  // 组件加载时执行
+  // 组件加载时执行 - 只在周期变化时执行一次
   useEffect(() => {
-    loadRecurringExpenses();
-    checkAndExecuteRecurring();
-  }, [loadRecurringExpenses, checkAndExecuteRecurring]);
+    if (currentCycle && !hasExecuted) {
+      loadRecurringExpenses();
+      checkAndExecuteRecurring();
+    }
+  }, [currentCycle]); // 只依赖 currentCycle
+
+  // 重置执行状态当周期变化时
+  useEffect(() => {
+    setHasExecuted(false);
+  }, [currentCycle]);
 
   // 保存固定支出配置
   const handleSave = async () => {
@@ -145,24 +172,51 @@ export default function RecurringExpenseManager({ currentCycle, onExpenseAdded }
 
   return (
     <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
-      <button 
-        className="w-full flex items-center justify-between mb-4 group" 
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-200">
-            <span className="text-white text-lg">🤖</span>
+      <div className="flex items-center justify-between mb-4">
+        <button 
+          className="flex-grow flex items-center justify-between group" 
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-md group-hover:shadow-lg transition-all duration-200">
+              <span className="text-white text-lg">🤖</span>
+            </div>
+            <div className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              固定支出管理 (自动添加)
+            </div>
           </div>
-          <div className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            固定支出管理 (自动添加)
+          <div className="flex items-center gap-2 bg-gray-800/70 backdrop-blur-sm px-4 py-2 rounded-lg border border-purple-700/30 group-hover:border-purple-600/50 transition-all duration-200">
+            <span className="text-sm font-medium text-purple-400">
+              {isOpen ? '📤 收起' : '📥 展开'}
+            </span>
           </div>
-        </div>
-        <div className="flex items-center gap-2 bg-gray-800/70 backdrop-blur-sm px-4 py-2 rounded-lg border border-purple-700/30 group-hover:border-purple-600/50 transition-all duration-200">
-          <span className="text-sm font-medium text-purple-400">
-            {isOpen ? '📤 收起' : '📥 展开'}
-          </span>
-        </div>
-      </button>
+        </button>
+        
+        {/* 添加刷新按钮 */}
+        <button
+          onClick={async () => {
+            try {
+              setLoading(true);
+              setHasExecuted(false); // 重置执行状态
+              await checkAndExecuteRecurring();
+              // 延迟通知父组件，避免立即触发循环
+              setTimeout(() => {
+                if (onExpenseAdded) {
+                  onExpenseAdded();
+                }
+              }, 1000);
+            } finally {
+              setLoading(false);
+            }
+          }}
+          disabled={loading}
+          className="ml-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-medium px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center gap-2"
+          title="刷新固定支出"
+        >
+          <span className={loading ? "animate-spin" : ""}>🔄</span>
+          <span>刷新</span>
+        </button>
+      </div>
 
       {/* 自动执行结果显示 */}
       {autoExecuteResult && (

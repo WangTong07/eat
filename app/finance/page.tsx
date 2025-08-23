@@ -6,6 +6,7 @@ import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 import MonthlyComparisonCard from "../components/MonthlyComparisonCard";
 import RecurringExpenseManager from "../components/RecurringExpenseManager";
 import { autoExecuteRecurringExpenses, getCurrentCycle } from "@/app/lib/autoRecurringExpenses";
+// 移除重复导入的getSupabaseClient
 
 // 固定月费（按工作日分摊）
 const MONTH_PRICE = 920;
@@ -24,11 +25,12 @@ export default function FinancePage(){
   const [showExpense, setShowExpense] = useState<boolean>(false);
   const [payRefreshKey, setPayRefreshKey] = useState<number>(0);
   const [linkedBudget, setLinkedBudget] = useState<number>(0);
+  const [refreshKey, setRefreshKey] = useState<number>(0);
 
   const ym = useMemo(()=>{ const d=new Date(date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; },[date]);
   const [items,setItems]=useState<Expense[]>([]);
   const [weekly,setWeekly]=useState<Array<{week_number:number,amount_sum:number}>>([]);
-
+  
   // 21号周期计算辅助函数
   const getCycleRange = useCallback((yearMonth: string) => {
     const [year, month] = yearMonth.split('-').map(v => parseInt(v));
@@ -43,25 +45,26 @@ export default function FinancePage(){
       endDate: endDate.toISOString().slice(0, 10)
     };
   }, []);
+  
+  // 计算当前周期总支出
+  const currentMonthTotal = useMemo(() => {
+    const { startDate, endDate } = getCycleRange(ym);
+    return items
+      .filter(item => item.date >= startDate && item.date <= endDate)
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [items, ym, getCycleRange]);
+  
+  // 当前周期标识
+  const currentMonth = ym;
 
   const fetchList = useCallback(async (skipAutoExecute = false) => {
     try {
-      // 首先自动执行固定支出（除非明确跳过）
-      if (!skipAutoExecute) {
-        try {
-          const result = await autoExecuteRecurringExpenses(ym, () => {
-            // 固定支出执行成功后，立即重新加载数据（跳过自动执行避免循环）
-            fetchList(true);
-            fetchWeekly();
-            setPayRefreshKey(k => k + 1);
-          });
-        } catch (error) {
-          console.error('自动执行固定支出失败:', error);
-        }
-      }
-
+      console.log(`[FinancePage] 开始加载支出数据，周期: ${ym}, 跳过自动执行: ${skipAutoExecute}`);
+      
       const supabase = getSupabaseClient();
       const { startDate, endDate } = getCycleRange(ym);
+      
+      console.log(`[FinancePage] 查询支出数据，时间范围: ${startDate} 到 ${endDate}`);
       
       const { data, error } = await supabase
         .from('expenses')
@@ -71,6 +74,12 @@ export default function FinancePage(){
         .order('date', { ascending: false });
       
       if (error) throw error;
+      
+      console.log(`[FinancePage] 查询到 ${data?.length || 0} 条支出记录`);
+      
+      // 统计固定支出
+      const recurringExpenses = data?.filter(e => e.is_recurring) || [];
+      console.log(`[FinancePage] 其中固定支出: ${recurringExpenses.length} 条`);
       
       setItems(data || []);
       
@@ -119,16 +128,25 @@ export default function FinancePage(){
     }
   }, [ym, getCycleRange]);
 
-  useEffect(()=>{ fetchList(); fetchWeekly(); },[fetchList, fetchWeekly]);
+  useEffect(()=>{ 
+    fetchList(); 
+    fetchWeekly(); 
+  },[ym]); // 只依赖 ym，避免无限循环
 
-  // 添加实时订阅
+  // 添加实时订阅 - 使用防抖避免频繁刷新
+  const handleRealtimeChange = useCallback(() => {
+    console.log('[FinancePage] 检测到支出记录变更，重新加载...');
+    // 防抖处理，避免频繁刷新
+    setTimeout(() => {
+      fetchList(true); // 跳过自动执行
+      fetchWeekly();
+      setRefreshKey(k => k + 1);
+    }, 1000);
+  }, [fetchList, fetchWeekly]);
+
   useRealtimeSubscription({
     table: 'expenses',
-    onChange: () => {
-      console.log('[FinancePage] 检测到支出记录变更，重新加载...');
-      fetchList();
-      fetchWeekly();
-    }
+    onChange: handleRealtimeChange
   });
 
   // 计算 ISO 周编号，格式与后端一致：YYYYWW
@@ -263,8 +281,10 @@ export default function FinancePage(){
       if (inputRef.current) inputRef.current.value = "";
       
       // 手动重新加载数据，确保界面立即更新
+      // 手动重新加载数据，确保界面立即更新
       await fetchList();
       await fetchWeekly();
+      setRefreshKey(k => k + 1); // 触发MonthlyComparisonCard刷新
     } catch (error: any) {
       console.error('添加支出失败:', error);
       alert(`添加失败：${error.message}`);
@@ -288,8 +308,10 @@ export default function FinancePage(){
       } catch {}
       
       // 手动重新加载数据，确保界面立即更新
+      // 手动重新加载数据，确保界面立即更新
       await fetchList();
       await fetchWeekly();
+      setRefreshKey(k => k + 1); // 触发MonthlyComparisonCard刷新
     } catch (error: any) {
       console.error('删除支出失败:', error);
       alert(`删除失败：${error.message}`);
@@ -314,17 +336,23 @@ export default function FinancePage(){
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <PaymentStatsCard ym={ym} refreshKey={payRefreshKey} onBudgetChange={setLinkedBudget} expenseItems={items} />
         <MonthlyComparisonCard 
-          currentMonth={ym} 
-          currentAmount={items.reduce((sum, item) => sum + Number(item.amount || 0), 0)} 
+          currentMonth={currentMonth}
+          currentAmount={currentMonthTotal}
+          refreshKey={refreshKey}
         />
       </div>
 
       <RecurringExpenseManager 
         currentCycle={ym} 
         onExpenseAdded={() => {
-          fetchList();
-          fetchWeekly();
-          setPayRefreshKey(k => k + 1);
+          console.log(`[FinancePage] RecurringExpenseManager 触发刷新回调`);
+          // 使用防抖，避免频繁调用
+          setTimeout(() => {
+            fetchList(true); // 跳过自动执行，避免重复
+            fetchWeekly();
+            setPayRefreshKey(k => k + 1);
+            setRefreshKey(k => k + 1); // 确保MonthlyComparisonCard也刷新
+          }, 500);
         }} 
       />
 
@@ -538,7 +566,7 @@ export default function FinancePage(){
         </>
         )}
       </div>
-      <PayStatsCard onChange={()=> setPayRefreshKey(k=>k+1)} />
+      <PayStatsCard onChange={()=> setPayRefreshKey(k=>k+1)} expenseItems={items} />
       {viewerSrc && (
         <div
           className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center"
@@ -609,7 +637,7 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
         const paid = memberDetails.filter((m: any) => m.paid).length;
         const unpaid = total - paid;
         
-        // 计算总预算（所有已缴费金额之和）
+        // 计算总预算（所有已缴费成员的金额总和，不管是整月还是区间）
         const budget = memberDetails.reduce((sum: number, member: any) => {
           return sum + (member.paid && member.amount ? Number(member.amount) : 0);
         }, 0);
@@ -717,7 +745,7 @@ function PaymentStatsCard({ ym, refreshKey, onBudgetChange, expenseItems }: { ym
 }
 
 // 成员缴费统计组件 - 深色主题设计
-function PayStatsCard({ onChange }: { onChange?: ()=>void }){
+function PayStatsCard({ onChange, expenseItems }: { onChange?: ()=>void; expenseItems?: Expense[] }){
   const [open, setOpen] = useState<boolean>(false);
   return (
     <div className="bg-gradient-to-br from-cyan-900/30 to-blue-900/30 border border-cyan-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
@@ -738,7 +766,7 @@ function PayStatsCard({ onChange }: { onChange?: ()=>void }){
       </button>
       {open && (
         <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-cyan-700/30">
-          <PayStats onChange={onChange} />
+          <PayStats onChange={onChange} expenseItems={expenseItems} />
         </div>
       )}
     </div>
@@ -746,13 +774,16 @@ function PayStatsCard({ onChange }: { onChange?: ()=>void }){
 }
 
 // 成员缴费统计明细表 - 深色主题
-function PayStats({ onChange }: { onChange?: ()=>void }){
+function PayStats({ onChange, expenseItems }: { onChange?: ()=>void; expenseItems?: Expense[] }){
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [month, setMonth] = useState<number>(new Date().getMonth()+1);
   const [members, setMembers] = useState<Array<{id:string; name:string}>>([]);
-  const [records, setRecords] = useState<Array<{member_id:string; paid:boolean; amount?:number|null; coverage?:'month'|'range'|null; from_date?:string|null; to_date?:string|null}>>([]);
+  const [records, setRecords] = useState<Array<{member_id:string; paid:boolean; amount?:number|null; coverage?:'month'|'range'|null; from_date?:string|null; to_date?:string|null; settlement_amount?:number|null; settlement_date?:string|null; is_settled?:boolean}>>([]);
   const [localAmounts, setLocalAmounts] = useState<Record<string, string>>({});
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
+  const [isSettling, setIsSettling] = useState<boolean>(false);
+  const [debounceTimers, setDebounceTimers] = useState<Record<string, NodeJS.Timeout>>({});
+  const [savingStates, setSavingStates] = useState<Record<string, boolean>>({});
 
   function monthWorkdays(yy:number, mm:number){
     const isWorkday = (d:Date)=>{ const k=d.getDay(); return k>=1 && k<=5; };
@@ -762,11 +793,11 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
   function suggestAmountByRange(from:string|null, to:string|null){
     if(!from || !to) return null as number|null;
     const isWorkday = (d:Date)=>{ const k=d.getDay(); return k>=1 && k<=5; };
-    let total=0; const s=new Date(from); const e=new Date(to);
+    let workdayCount=0; const s=new Date(from); const e=new Date(to);
     if(isNaN(s.getTime())||isNaN(e.getTime())||s>e) return null;
     const d=new Date(s);
-    while(d<=e){ if(isWorkday(d)){ const md=monthWorkdays(d.getFullYear(), d.getMonth()+1); if(md>0) total += MONTH_PRICE/md; } d.setDate(d.getDate()+1); }
-    return Math.round(total);
+    while(d<=e){ if(isWorkday(d)){ workdayCount++; } d.setDate(d.getDate()+1); }
+    return workdayCount * 48; // 每个工作日48元，周末不计费
   }
 
   async function reload(){
@@ -781,13 +812,98 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
       setRecords(j2.items||[]);
     }catch{}
   }
-  useEffect(()=>{ reload(); },[year,month]);
+
+  // 计算当前周期支出总额（使用传递进来的expenseItems）
+  const totalExpenses = useMemo(() => {
+    if (!expenseItems) return 0;
+    
+    // 计算21号周期范围
+    const startDate = new Date(year, month - 1, 21); // 本月21号
+    const endDate = new Date(year, month, 20);       // 次月20号
+    
+    const startStr = startDate.toISOString().slice(0, 10);
+    const endStr = endDate.toISOString().slice(0, 10);
+    
+    return expenseItems
+      .filter(item => item.date >= startStr && item.date <= endStr)
+      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [expenseItems, year, month]);
+
+  useEffect(()=>{ 
+    reload(); 
+  },[year,month]);
+
+  // 清理防抖定时器
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimers).forEach(timer => {
+        if (timer) clearTimeout(timer);
+      });
+    };
+  }, [debounceTimers]);
 
   const map: Record<string, any> = {};
   records.forEach(r=>{ map[r.member_id]=r; });
   const totalCount = members.length;
   const paidCount = members.filter(m=> !!(map[m.id] && map[m.id].paid)).length;
   const unpaidCount = totalCount - paidCount;
+
+  // 计算结算相关数据
+  const monthlyMembers = members.filter(m => {
+    const rec = map[m.id];
+    return rec && rec.paid && rec.coverage === 'month';
+  });
+  
+  // 总预算 = 所有已缴费成员的金额总和（包括整月和区间）
+  const totalBudget = members.reduce((sum, m) => {
+    const rec = map[m.id];
+    return sum + (rec && rec.paid && rec.amount ? Number(rec.amount) : 0);
+  }, 0);
+  
+  const remainingBudget = totalBudget - totalExpenses;
+  const settlementPerPerson = monthlyMembers.length > 0 ? remainingBudget / monthlyMembers.length : 0;
+
+  // 手动结算功能
+  async function handleSettlement() {
+    if (isSettling) return;
+    if (monthlyMembers.length === 0) {
+      alert('没有符合条件的成员（整月缴费且已缴费）');
+      return;
+    }
+    if (remainingBudget <= 0) {
+      alert('当前没有结余可分配');
+      return;
+    }
+    
+    const confirmMsg = `确认结算吗？\n结余金额：¥${remainingBudget.toFixed(2)}\n符合条件成员：${monthlyMembers.length}人\n每人返还：¥${settlementPerPerson.toFixed(2)}`;
+    if (!confirm(confirmMsg)) return;
+    
+    setIsSettling(true);
+    try {
+      // 调用结算API
+      const response = await fetch('/api/settlement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year, month })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        alert(`结算完成！每人返还：¥${result.settlement.settlementAmount.toFixed(2)}`);
+      } else {
+        alert(`结算失败：${result.message || '未知错误'}`);
+      }
+      
+      await reload();
+      onChange && onChange();
+    } catch (error) {
+      console.error('结算失败:', error);
+      alert('结算失败，请重试');
+    } finally {
+      setIsSettling(false);
+    }
+  }
 
   function setLocal(memberId: string, patch: any){
     setRecords(prev=>{
@@ -835,13 +951,30 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
     setLocal(memberId, { paid });
     setSavingIds(prev=>({ ...prev, [memberId]: true }));
     try{
-      await fetch('/api/members/pay', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ member_id: memberId, year, month, paid }) });
-      const r = await fetch(`/api/members/pay?year=${year}&month=${month}`);
-      const j = await r.json();
-      setRecords(j.items||[]);
-      onChange && onChange();
-    }catch(e){ console.error('保存失败', e); }
-    finally{ setSavingIds(prev=>{ const n={...prev}; delete n[memberId]; return n; }); }
+      // 发送更新请求
+      const response = await fetch('/api/members/pay', { 
+        method:'POST', 
+        headers:{'Content-Type':'application/json'}, 
+        body: JSON.stringify({ member_id: memberId, year, month, paid }) 
+      });
+      
+      // 重新加载缴费数据
+      await reload();
+      
+      // 通知父组件数据已更新，触发全局刷新
+      if (onChange) {
+        try {
+          onChange();
+        } catch (err) {
+          console.error('触发onChange回调失败:', err);
+        }
+      }
+    } catch(e){ 
+      console.error('保存缴费状态失败:', e); 
+      alert('更新缴费状态失败，请重试');
+    } finally { 
+      setSavingIds(prev=>{ const n={...prev}; delete n[memberId]; return n; }); 
+    }
   }
 
   return (
@@ -896,6 +1029,51 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
             </div>
           </div>
         </div>
+        
+        {/* 结算信息和按钮 */}
+        {monthlyMembers.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-cyan-700/30">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-6 text-sm">
+                <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-yellow-700/30">
+                  <span className="text-yellow-400">💰</span>
+                  <span className="text-gray-300">总预算：</span>
+                  <span className="font-bold text-yellow-400">¥{totalBudget.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-orange-700/30">
+                  <span className="text-orange-400">💸</span>
+                  <span className="text-gray-300">总支出：</span>
+                  <span className="font-bold text-orange-400">¥{totalExpenses.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-green-700/30">
+                  <span className="text-green-400">💎</span>
+                  <span className="text-gray-300">结余：</span>
+                  <span className="font-bold text-green-400">¥{remainingBudget.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-purple-700/30">
+                  <span className="text-purple-400">👥</span>
+                  <span className="text-gray-300">整月人数：</span>
+                  <span className="font-bold text-purple-400">{monthlyMembers.length}</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-green-700/30">
+                <span className="text-green-400">💰</span>
+                <button
+                  className={`px-4 py-2 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200 ${
+                    isSettling || remainingBudget <= 0 || monthlyMembers.length === 0
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white'
+                  }`}
+                  onClick={handleSettlement}
+                  disabled={isSettling || remainingBudget <= 0 || monthlyMembers.length === 0}
+                >
+                  {isSettling ? '🔄 结算中...' : '立即结算'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 成员缴费表格 - 深色主题设计 */}
@@ -904,16 +1082,20 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
           <table className="min-w-full text-sm">
             <thead className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white">
               <tr>
-                <th className="px-4 py-3 text-left font-semibold text-sm">👤 姓名</th>
-                <th className="px-4 py-3 text-center font-semibold text-sm">💳 是否已交</th>
-                <th className="px-4 py-3 text-center font-semibold text-sm">💰 金额</th>
-                <th className="px-4 py-3 text-center font-semibold text-sm">📅 覆盖范围</th>
-                <th className="px-4 py-3 text-center font-semibold text-sm w-20">⚙️ 操作</th>
+                <th className="px-4 py-3 text-left font-semibold text-sm">👤姓名</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm">💳是否已交</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm">💰金额</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm">📅覆盖范围</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm">💰结算返还</th>
+                <th className="px-4 py-3 text-center font-semibold text-sm w-20">⚙️操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-cyan-700/30">
-              {members.map((m, index)=>{
+                {members.map((m, index)=>{
                 const rec = map[m.id] || {};
+                const isEligibleForSettlement = rec.paid && rec.coverage === 'month';
+                const settlementAmount = rec.is_settled ? rec.settlement_amount : (isEligibleForSettlement ? settlementPerPerson : 0);
+                
                 return (
                   <tr key={`pay-${m.id}`} className={`hover:bg-cyan-800/30 transition-colors duration-150 ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-cyan-800/20'}`}>
                     <td className="px-4 py-2 font-medium text-gray-200">{m.name}</td>
@@ -979,33 +1161,153 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
                           <option value="range">区间</option>
                         </select>
                         <div className="flex items-center gap-1" style={{ minWidth: 240, visibility: rec.coverage==='range' ? 'visible' as any : 'hidden' as any }}>
-                          <input 
-                            type="date" 
-                            className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 text-sm focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200" 
-                            value={rec.from_date || ''} 
-                            onChange={(e)=>{ 
-                              const v=e.target.value||null; 
-                              setLocal(m.id, { from_date: v }); 
-                              upsert(m.id, { from_date: v }); 
-                              const sug=suggestAmountByRange(v, rec.to_date||null); 
-                              if(sug!==null){ setLocal(m.id, { amount: sug }); upsert(m.id, { amount: sug }); } 
-                            }} 
-                          />
+                          <div className="relative">
+                            <input 
+                              type="date" 
+                              className={`border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 text-sm focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200 ${
+                                savingStates[`${m.id}_from_date`] ? 'opacity-60' : ''
+                              }`}
+                              value={rec.from_date || ''} 
+                              disabled={savingStates[`${m.id}_from_date`]}
+                              onChange={(e)=>{ 
+                                const v=e.target.value||null; 
+                                
+                                // 清除之前的防抖定时器
+                                const timerKey = `${m.id}_from_date`;
+                                setDebounceTimers(prev => {
+                                  if (prev[timerKey]) {
+                                    clearTimeout(prev[timerKey]);
+                                  }
+                                  return prev;
+                                });
+                                
+                                // 立即更新本地状态，提升用户体验
+                                setLocal(m.id, { from_date: v }); 
+                                
+                                // 设置新的防抖定时器，延迟API调用
+                                const newTimer = setTimeout(async () => {
+                                  // 设置保存状态
+                                  setSavingStates(prev => ({ ...prev, [timerKey]: true }));
+                                  
+                                  try {
+                                    await upsert(m.id, { from_date: v }); 
+                                    const sug=suggestAmountByRange(v, rec.to_date||null); 
+                                    if(sug!==null){ 
+                                      setLocal(m.id, { amount: sug }); 
+                                      await upsert(m.id, { amount: sug }); 
+                                    }
+                                  } finally {
+                                    // 清理保存状态和定时器
+                                    setSavingStates(prev => {
+                                      const newStates = {...prev};
+                                      delete newStates[timerKey];
+                                      return newStates;
+                                    });
+                                    setDebounceTimers(prev => {
+                                      const newTimers = {...prev};
+                                      delete newTimers[timerKey];
+                                      return newTimers;
+                                    });
+                                  }
+                                }, 1000); // 增加到1000ms防抖延迟，给API更多响应时间
+                                
+                                // 保存新定时器
+                                setDebounceTimers(prev => ({
+                                  ...prev,
+                                  [timerKey]: newTimer
+                                }));
+                              }} 
+                            />
+                            {savingStates[`${m.id}_from_date`] && (
+                              <div className="absolute -right-6 top-1/2 -translate-y-1/2">
+                                <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                              </div>
+                            )}
+                          </div>
                           <span className="text-cyan-400 text-sm">~</span>
-                          <input 
-                            type="date" 
-                            className="border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 text-sm focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200" 
-                            value={rec.to_date || ''} 
-                            onChange={(e)=>{ 
-                              const v=e.target.value||null; 
-                              setLocal(m.id, { to_date: v }); 
-                              upsert(m.id, { to_date: v }); 
-                              const sug=suggestAmountByRange(rec.from_date||null, v); 
-                              if(sug!==null){ setLocal(m.id, { amount: sug }); upsert(m.id, { amount: sug }); } 
-                            }} 
-                          />
+                          <div className="relative">
+                            <input 
+                              type="date" 
+                              className={`border border-cyan-700/30 bg-gray-800/50 text-gray-200 rounded-md px-2 py-1 text-sm focus:border-cyan-600/50 focus:ring-1 focus:ring-cyan-900/30 transition-all duration-200 ${
+                                savingStates[`${m.id}_to_date`] ? 'opacity-60' : ''
+                              }`}
+                              value={rec.to_date || ''} 
+                              disabled={savingStates[`${m.id}_to_date`]}
+                              onChange={(e)=>{ 
+                                const v=e.target.value||null; 
+                                
+                                // 清除之前的防抖定时器
+                                const timerKey = `${m.id}_to_date`;
+                                setDebounceTimers(prev => {
+                                  if (prev[timerKey]) {
+                                    clearTimeout(prev[timerKey]);
+                                  }
+                                  return prev;
+                                });
+                                
+                                // 立即更新本地状态，提升用户体验
+                                setLocal(m.id, { to_date: v }); 
+                                
+                                // 设置新的防抖定时器，延迟API调用
+                                const newTimer = setTimeout(async () => {
+                                  // 设置保存状态
+                                  setSavingStates(prev => ({ ...prev, [timerKey]: true }));
+                                  
+                                  try {
+                                    await upsert(m.id, { to_date: v }); 
+                                    const sug=suggestAmountByRange(rec.from_date||null, v); 
+                                    if(sug!==null){ 
+                                      setLocal(m.id, { amount: sug }); 
+                                      await upsert(m.id, { amount: sug }); 
+                                    }
+                                  } finally {
+                                    // 清理保存状态和定时器
+                                    setSavingStates(prev => {
+                                      const newStates = {...prev};
+                                      delete newStates[timerKey];
+                                      return newStates;
+                                    });
+                                    setDebounceTimers(prev => {
+                                      const newTimers = {...prev};
+                                      delete newTimers[timerKey];
+                                      return newTimers;
+                                    });
+                                  }
+                                }, 1000); // 增加到1000ms防抖延迟，给API更多响应时间
+                                
+                                // 保存新定时器
+                                setDebounceTimers(prev => ({
+                                  ...prev,
+                                  [timerKey]: newTimer
+                                }));
+                              }} 
+                            />
+                            {savingStates[`${m.id}_to_date`] && (
+                              <div className="absolute -right-6 top-1/2 -translate-y-1/2">
+                                <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      {!isEligibleForSettlement ? (
+                        <span className="text-gray-500 text-sm">-</span>
+                      ) : rec.is_settled ? (
+                        <div className="flex flex-col items-center">
+                          <span className="text-green-400 font-bold text-sm">¥{Number(rec.settlement_amount || 0).toFixed(2)}</span>
+                          <span className="text-green-300 text-xs">已结算</span>
+                          {rec.settlement_date && (
+                            <span className="text-gray-400 text-xs">{new Date(rec.settlement_date).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center">
+                          <span className="text-yellow-400 font-bold text-sm">¥{settlementPerPerson.toFixed(2)}</span>
+                          <span className="text-yellow-300 text-xs">预计返还</span>
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-center">
                       <button 
@@ -1024,7 +1326,7 @@ function PayStats({ onChange }: { onChange?: ()=>void }){
               })}
               {members.length===0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-3xl">👥</span>
                       <span>暂无成员</span>

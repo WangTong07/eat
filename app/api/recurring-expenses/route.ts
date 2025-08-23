@@ -73,9 +73,11 @@ export async function GET(req: NextRequest) {
         
         if (!execution) {
           // 还没有执行过，创建支出记录
-          const expenseDate = startDate; // 在周期开始日期添加
+          // 确保日期设置在当前周期内（21号）
+          const expenseDate = startDate; // 使用周期的第一天（21号）
           
           // 创建支出记录，直接写入expenses表，确保所有统计都能包含
+          // 将固定支出添加到周期的第一天，确保它被包含在周期花销对比中
           const { data: expense, error: expenseError } = await supabase
             .from('expenses')
             .insert({
@@ -85,6 +87,8 @@ export async function GET(req: NextRequest) {
               user_name: '系统自动',
               is_recurring: true,
               recurring_expense_id: recurring.id
+              // 移除不存在的字段
+              // cycle_year 和 cycle_month 字段在数据库中不存在
             })
             .select()
             .single();

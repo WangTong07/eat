@@ -1,27 +1,33 @@
 // 自动执行固定支出的工具函数
 export async function autoExecuteRecurringExpenses(currentCycle: string, onSuccess?: () => void) {
   try {
+    console.log(`[自动固定支出] 开始检查周期: ${currentCycle}`);
+    
     const response = await fetch(`/api/recurring-expenses?action=check_and_execute&cycle=${currentCycle}`);
     const data = await response.json();
     
+    console.log(`[自动固定支出] API响应:`, data);
+    
     if (data.success) {
       const addedCount = data.results?.filter((r: any) => r.status === 'added').length || 0;
-      if (addedCount > 0) {
-        console.log(`[自动固定支出] 本周期新增 ${addedCount} 项固定支出`);
-        
-        // 如果有新增的固定支出，触发回调通知组件更新
-        if (onSuccess) {
-          // 延迟一点执行，确保数据库操作完成
-          setTimeout(() => {
-            onSuccess();
-          }, 100);
-        }
-        
-        return { success: true, addedCount, results: data.results };
+      const existingCount = data.results?.filter((r: any) => r.status === 'already_exists').length || 0;
+      
+      console.log(`[自动固定支出] 本周期新增: ${addedCount} 项，已存在: ${existingCount} 项`);
+      
+      // 无论是否有新增，都触发回调以确保界面更新
+      if (onSuccess) {
+        // 稍微延迟执行，确保数据库操作完成
+        setTimeout(() => {
+          console.log(`[自动固定支出] 触发成功回调`);
+          onSuccess();
+        }, 200);
       }
+      
+      return { success: true, addedCount, existingCount, results: data.results };
+    } else {
+      console.error(`[自动固定支出] API返回失败:`, data.error);
+      return { success: false, error: data.error };
     }
-    
-    return { success: true, addedCount: 0, results: data.results || [] };
   } catch (error) {
     console.error('[自动固定支出] 执行失败:', error);
     return { success: false, error };
