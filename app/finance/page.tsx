@@ -5,7 +5,6 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 import MonthlyComparisonCard from "../components/MonthlyComparisonCard";
 import RecurringExpenseManager from "../components/RecurringExpenseManager";
-import { autoExecuteRecurringExpenses, getCurrentCycle } from "@/app/lib/autoRecurringExpenses";
 // 移除重复导入的getSupabaseClient
 
 // 固定月费（按工作日分摊）
@@ -20,8 +19,6 @@ export default function FinancePage(){
   const [handler,setHandler]=useState("");
   const [files,setFiles]=useState<File[]>([]);
   const [staffList, setStaffList] = useState<string[]>([]);
-  const [showStaffDropdown, setShowStaffDropdown] = useState(false);
-  const [filteredStaff, setFilteredStaff] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement|null>(null);
   const [previews, setPreviews] = useState<string[]>([]);
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
@@ -136,49 +133,40 @@ export default function FinancePage(){
     fetchWeekly(); 
   },[ym]); // 只依赖 ym，避免无限循环
 
-  // 获取值班人员名单
+  // 获取成员列表
   useEffect(() => {
     async function fetchStaffList() {
       try {
-        const response = await fetch('/api/duty/staff');
+        const response = await fetch('/api/members');
+        
         if (response.ok) {
           const data = await response.json();
-          // 提取所有值班人员的姓名，去重
-          const names = [...new Set(data.flatMap((item: any) => [
-            item.morning_staff,
-            item.afternoon_staff,
-            item.evening_staff
-          ]).filter(Boolean))];
-          setStaffList(names);
-          setFilteredStaff(names);
+          
+          // 提取活跃成员姓名列表
+          const memberNames = data.items
+            ?.filter((member: any) => member.is_active !== false) // 包含活跃成员
+            ?.map((member: any) => member.name) || [];
+          
+          // 如果API返回的数据为空，使用默认选项
+          const finalNames = memberNames.length > 0 ? memberNames : ['陶子', 'ethan', 'Ethan', 'Dunk'];
+          
+          setStaffList(finalNames);
+        } else {
+          console.error('获取成员列表失败');
+          // API失败时使用默认人员列表
+          const defaultStaff = ['陶子', 'ethan', 'Ethan', 'Dunk'];
+          setStaffList(defaultStaff);
         }
       } catch (error) {
-        console.error('获取值班人员失败:', error);
+        console.error('获取成员列表出错:', error);
+        // 出错时使用默认人员列表
+        const defaultStaff = ['陶子', 'ethan', 'Ethan', 'Dunk'];
+        setStaffList(defaultStaff);
       }
     }
     fetchStaffList();
   }, []);
 
-  // 处理经手人输入变化
-  const handleHandlerChange = (value: string) => {
-    setHandler(value);
-    if (value.trim()) {
-      const filtered = staffList.filter(name => 
-        name.toLowerCase().includes(value.toLowerCase())
-      );
-      setFilteredStaff(filtered);
-      setShowStaffDropdown(filtered.length > 0);
-    } else {
-      setFilteredStaff(staffList);
-      setShowStaffDropdown(false);
-    }
-  };
-
-  // 选择值班人员
-  const selectStaff = (name: string) => {
-    setHandler(name);
-    setShowStaffDropdown(false);
-  };
 
   // 添加实时订阅 - 使用防抖避免频繁刷新
   const handleRealtimeChange = useCallback(() => {
@@ -482,7 +470,7 @@ export default function FinancePage(){
         <>
           {/* 添加支出表单 */}
           <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-orange-700/30 mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start relative">
               <input 
                 type="date" 
                 value={date} 
@@ -535,40 +523,17 @@ export default function FinancePage(){
               <div className="relative">
                 <input
                   type="text"
+                  list="staff-list"
                   className="w-full border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400"
-                  placeholder="👤 经手人"
+                  placeholder="👤 经手人（可输入或选择）"
                   value={handler}
-                  onChange={e => handleHandlerChange(e.target.value)}
-                  onFocus={() => {
-                    if (staffList.length > 0) {
-                      setFilteredStaff(staffList);
-                      setShowStaffDropdown(true);
-                    }
-                  }}
-                  onBlur={() => {
-                    // 延迟隐藏下拉框，允许点击选项
-                    setTimeout(() => setShowStaffDropdown(false), 200);
-                  }}
+                  onChange={(e) => setHandler(e.target.value)}
                 />
-                
-                {/* 值班人员下拉列表 */}
-                {showStaffDropdown && filteredStaff.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800/95 backdrop-blur-sm border border-gray-600/50 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
-                    {filteredStaff.map((name, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        className="w-full text-left px-4 py-2 text-white hover:bg-purple-600/30 transition-colors duration-150 first:rounded-t-lg last:rounded-b-lg"
-                        onMouseDown={(e) => {
-                          e.preventDefault(); // 防止输入框失去焦点
-                          selectStaff(name);
-                        }}
-                      >
-                        <span className="text-purple-400">👤</span> {name}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <datalist id="staff-list">
+                  {staffList.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
               </div>
               <button 
                 className="bg-gradient-to-r from-orange-400 to-amber-500 hover:from-orange-500 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-lg h-[44px] flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-95 transition-all duration-200" 
@@ -670,6 +635,8 @@ export default function FinancePage(){
           <img src={viewerSrc} className="max-w-[90vw] max-h-[90vh] object-contain shadow-2xl" />
         </div>
       )}
+
+      {/* 移除Portal渲染的下拉列表，改为在经手人输入框中直接添加下拉列表 */}
     </Shell>
   );
 }
