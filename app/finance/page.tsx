@@ -19,6 +19,9 @@ export default function FinancePage(){
   const [amount,setAmount]=useState("");
   const [handler,setHandler]=useState("");
   const [files,setFiles]=useState<File[]>([]);
+  const [staffList, setStaffList] = useState<string[]>([]);
+  const [showStaffDropdown, setShowStaffDropdown] = useState(false);
+  const [filteredStaff, setFilteredStaff] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement|null>(null);
   const [previews, setPreviews] = useState<string[]>([]);
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
@@ -132,6 +135,50 @@ export default function FinancePage(){
     fetchList(); 
     fetchWeekly(); 
   },[ym]); // 只依赖 ym，避免无限循环
+
+  // 获取值班人员名单
+  useEffect(() => {
+    async function fetchStaffList() {
+      try {
+        const response = await fetch('/api/duty/staff');
+        if (response.ok) {
+          const data = await response.json();
+          // 提取所有值班人员的姓名，去重
+          const names = [...new Set(data.flatMap((item: any) => [
+            item.morning_staff,
+            item.afternoon_staff,
+            item.evening_staff
+          ]).filter(Boolean))];
+          setStaffList(names);
+          setFilteredStaff(names);
+        }
+      } catch (error) {
+        console.error('获取值班人员失败:', error);
+      }
+    }
+    fetchStaffList();
+  }, []);
+
+  // 处理经手人输入变化
+  const handleHandlerChange = (value: string) => {
+    setHandler(value);
+    if (value.trim()) {
+      const filtered = staffList.filter(name => 
+        name.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredStaff(filtered);
+      setShowStaffDropdown(filtered.length > 0);
+    } else {
+      setFilteredStaff(staffList);
+      setShowStaffDropdown(false);
+    }
+  };
+
+  // 选择值班人员
+  const selectStaff = (name: string) => {
+    setHandler(name);
+    setShowStaffDropdown(false);
+  };
 
   // 添加实时订阅 - 使用防抖避免频繁刷新
   const handleRealtimeChange = useCallback(() => {
@@ -292,6 +339,24 @@ export default function FinancePage(){
   }
 
   async function onDelete(it: Expense){
+    // 添加删除确认弹窗，显示详细信息
+    const description = (it as any).item_description || it.description || '无描述';
+    const amount = Number(it.amount || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+    const handler = (it as any).user_name || it.handler || '无经手人';
+    
+    const confirmMessage = `确定要删除这条支出记录吗？
+
+📅 日期：${it.date}
+📝 描述：${description}
+💰 金额：¥${amount}
+👤 经手人：${handler}
+
+⚠️ 删除后无法恢复，请确认！`;
+
+    if (!confirm(confirmMessage)) {
+      return; // 用户点击取消，不执行删除
+    }
+
     try {
       const supabase = getSupabaseClient();
       const { error } = await supabase
@@ -307,7 +372,6 @@ export default function FinancePage(){
         localStorage.removeItem(localKey);
       } catch {}
       
-      // 手动重新加载数据，确保界面立即更新
       // 手动重新加载数据，确保界面立即更新
       await fetchList();
       await fetchWeekly();
@@ -425,13 +489,12 @@ export default function FinancePage(){
                 onChange={e=>setDate(e.target.value)} 
                 className="border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200" 
               />
-              <div className="relative md:col-span-1">
-                <input
-                  type="text"
-                  placeholder="📝 描述"
-                  value={desc}
-                  onChange={e=>setDesc(e.target.value)}
-                  className="border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg w-full px-3 py-2 pr-12 h-[44px] focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400"
+              <div className="relative">
+                <input 
+                  placeholder="📝 描述" 
+                  value={desc} 
+                  onChange={e=>setDesc(e.target.value)} 
+                  className="w-full border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 pr-12 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400" 
                 />
                 <button
                   type="button"
@@ -469,12 +532,44 @@ export default function FinancePage(){
                 onChange={e=>setAmount(e.target.value)} 
                 className="border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400" 
               />
-              <input 
-                placeholder="👤 经手人" 
-                value={handler} 
-                onChange={e=>setHandler(e.target.value)} 
-                className="border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400" 
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  className="w-full border-2 border-orange-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-orange-600/50 focus:ring-2 focus:ring-orange-900/30 transition-all duration-200 placeholder-gray-400"
+                  placeholder="👤 经手人"
+                  value={handler}
+                  onChange={e => handleHandlerChange(e.target.value)}
+                  onFocus={() => {
+                    if (staffList.length > 0) {
+                      setFilteredStaff(staffList);
+                      setShowStaffDropdown(true);
+                    }
+                  }}
+                  onBlur={() => {
+                    // 延迟隐藏下拉框，允许点击选项
+                    setTimeout(() => setShowStaffDropdown(false), 200);
+                  }}
+                />
+                
+                {/* 值班人员下拉列表 */}
+                {showStaffDropdown && filteredStaff.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-gray-800/95 backdrop-blur-sm border border-gray-600/50 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto">
+                    {filteredStaff.map((name, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className="w-full text-left px-4 py-2 text-white hover:bg-purple-600/30 transition-colors duration-150 first:rounded-t-lg last:rounded-b-lg"
+                        onMouseDown={(e) => {
+                          e.preventDefault(); // 防止输入框失去焦点
+                          selectStaff(name);
+                        }}
+                      >
+                        <span className="text-purple-400">👤</span> {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button 
                 className="bg-gradient-to-r from-orange-400 to-amber-500 hover:from-orange-500 hover:to-amber-600 text-white font-semibold px-4 py-2 rounded-lg h-[44px] flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-95 transition-all duration-200" 
                 onClick={onAdd}
