@@ -24,7 +24,7 @@ interface ExpenseByHandlerTableProps {
 
 export default function ExpenseByHandlerTable({ expensesByHandler, onViewDetails }: ExpenseByHandlerTableProps) {
   const formatCurrency = (amount: number) => {
-    return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const totalExpense = expensesByHandler.reduce((sum, handler) => sum + handler.totalAmount, 0);

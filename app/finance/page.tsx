@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 import MonthlyComparisonCard from "../components/MonthlyComparisonCard";
-import RecurringExpenseManager from "../components/RecurringExpenseManager";
 // 移除重复导入的getSupabaseClient
 
 // 固定月费（按工作日分摊）
@@ -23,13 +22,13 @@ export default function FinancePage(){
   const [previews, setPreviews] = useState<string[]>([]);
   const [viewerSrc, setViewerSrc] = useState<string | null>(null);
   const [showExpense, setShowExpense] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'manual' | 'recurring'>('manual'); // 标签页状态
   const [payRefreshKey, setPayRefreshKey] = useState<number>(0);
   const [linkedBudget, setLinkedBudget] = useState<number>(0);
   const [refreshKey, setRefreshKey] = useState<number>(0);
 
   const ym = useMemo(()=>{ const d=new Date(date); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; },[date]);
   const [items,setItems]=useState<Expense[]>([]);
-  const [weekly,setWeekly]=useState<Array<{week_number:number,amount_sum:number}>>([]);
   
   // 21号周期计算辅助函数
   const getCycleRange = useCallback((yearMonth: string) => {
@@ -93,44 +92,9 @@ export default function FinancePage(){
       setItems([]);
     }
   }, [ym, getCycleRange]);
-  const fetchWeekly = useCallback(async () => {
-    try {
-      const supabase = getSupabaseClient();
-      const { startDate, endDate } = getCycleRange(ym);
-      
-      // 只查询 date 和 amount，然后在前端计算周数
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('date, amount')
-        .gte('date', startDate)
-        .lte('date', endDate);
-      
-      if (error) throw error;
-      
-      // 按周数汇总（在前端计算周数）
-      const weekMap: Record<number, number> = {};
-      (data || []).forEach(item => {
-        if (item.date) {
-          const weekNumber = isoWeekNumberFromString(item.date);
-          weekMap[weekNumber] = (weekMap[weekNumber] || 0) + Number(item.amount || 0);
-        }
-      });
-      
-      const weeklyData = Object.keys(weekMap).map(weekNum => ({
-        week_number: parseInt(weekNum),
-        amount_sum: weekMap[parseInt(weekNum)]
-      })).sort((a, b) => a.week_number - b.week_number);
-      
-      setWeekly(weeklyData);
-    } catch (error) {
-      console.error('获取周汇总失败:', error);
-      setWeekly([]);
-    }
-  }, [ym, getCycleRange]);
 
-  useEffect(()=>{ 
-    fetchList(); 
-    fetchWeekly(); 
+  useEffect(()=>{
+    fetchList();
   },[ym]); // 只依赖 ym，避免无限循环
 
   // 获取成员列表
@@ -174,10 +138,9 @@ export default function FinancePage(){
     // 防抖处理，避免频繁刷新
     setTimeout(() => {
       fetchList(true); // 跳过自动执行
-      fetchWeekly();
       setRefreshKey(k => k + 1);
     }, 1000);
-  }, [fetchList, fetchWeekly]);
+  }, [fetchList]);
 
   useRealtimeSubscription({
     table: 'expenses',
@@ -220,41 +183,7 @@ export default function FinancePage(){
     }, 0);
   }, [items, currentWeekNumber]);
 
-  // 以客户端数据即时计算"本周期每周支出汇总"（21号周期内的数据）
-  const weeklyView = useMemo(() => {
-    const map: Record<string, number> = {};
-    const { startDate, endDate } = getCycleRange(ym);
-    
-    items.forEach((it) => {
-      if (!it?.date) return;
-      // 检查日期是否在当前21号周期内
-      if (it.date >= startDate && it.date <= endDate) {
-        const wk = isoWeekNumberFromString(it.date);
-        map[wk] = (map[wk] || 0) + Number(it.amount || 0);
-      }
-    });
-    return Object.keys(map)
-      .sort()
-      .map((k) => ({ week_number: Number(k), amount_sum: map[k] }));
-  }, [items, ym, getCycleRange]);
 
-  // 将 ISO 周编号转换为"几月几号-几号"的显示
-  function isoWeekRangeLabel(weekNumber: number): string {
-    const year = Math.floor(weekNumber / 100);
-    const week = weekNumber % 100;
-    // 找到第1周的周一（包含1月4日的那一周）
-    const jan4 = new Date(Date.UTC(year, 0, 4));
-    const day = jan4.getUTCDay() || 7; // 1..7，周一=1
-    const week1Monday = new Date(jan4);
-    week1Monday.setUTCDate(jan4.getUTCDate() - day + 1);
-    // 目标周的周一
-    const start = new Date(week1Monday);
-    start.setUTCDate(week1Monday.getUTCDate() + (week - 1) * 7);
-    const end = new Date(start);
-    end.setUTCDate(start.getUTCDate() + 6);
-    const fmt = (d: Date) => `${d.getUTCMonth() + 1}月${d.getUTCDate()}日`;
-    return `${fmt(start)}-${fmt(end)}`;
-  }
 
   // Generate preview URLs for selected images
   useEffect(() => {
@@ -316,9 +245,7 @@ export default function FinancePage(){
       if (inputRef.current) inputRef.current.value = "";
       
       // 手动重新加载数据，确保界面立即更新
-      // 手动重新加载数据，确保界面立即更新
       await fetchList();
-      await fetchWeekly();
       setRefreshKey(k => k + 1); // 触发MonthlyComparisonCard刷新
     } catch (error: any) {
       console.error('添加支出失败:', error);
@@ -362,7 +289,6 @@ export default function FinancePage(){
       
       // 手动重新加载数据，确保界面立即更新
       await fetchList();
-      await fetchWeekly();
       setRefreshKey(k => k + 1); // 触发MonthlyComparisonCard刷新
     } catch (error: any) {
       console.error('删除支出失败:', error);
@@ -394,60 +320,7 @@ export default function FinancePage(){
         />
       </div>
 
-      <RecurringExpenseManager 
-        currentCycle={ym} 
-        onExpenseAdded={() => {
-          console.log(`[FinancePage] RecurringExpenseManager 触发刷新回调`);
-          // 使用防抖，避免频繁调用
-          setTimeout(() => {
-            fetchList(true); // 跳过自动执行，避免重复
-            fetchWeekly();
-            setPayRefreshKey(k => k + 1);
-            setRefreshKey(k => k + 1); // 确保MonthlyComparisonCard也刷新
-          }, 500);
-        }} 
-      />
 
-      <div className="bg-gradient-to-br from-emerald-900/30 to-teal-900/30 border border-emerald-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-md">
-            <span className="text-white text-lg">📊</span>
-          </div>
-          <div className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-            本周期每周支出汇总 (21号-20号)
-          </div>
-        </div>
-        <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg border border-emerald-700/30 overflow-hidden">
-          <table className="min-w-full">
-            <thead className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white">
-              <tr>
-                <th className="px-6 py-4 text-left font-semibold">📅 周编号</th>
-                <th className="px-6 py-4 text-right font-semibold">💰 支出金额</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-emerald-700/30">
-              {weeklyView.length===0 && (
-                <tr>
-                  <td className="px-6 py-3 text-center text-gray-400" colSpan={2}>
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="text-2xl">📝</span>
-                      <span>本月暂无支出</span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {weeklyView.map((w, index)=> (
-                <tr key={w.week_number} className={`hover:bg-emerald-800/30 transition-colors duration-150 ${index % 2 === 0 ? 'bg-gray-800/30' : 'bg-emerald-800/20'}`}>
-                  <td className="px-6 py-2 font-medium text-gray-200">{isoWeekRangeLabel(w.week_number)}</td>
-                  <td className="px-6 py-2 text-right font-mono font-bold text-emerald-400">
-                    ¥{Number(w.amount_sum||0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       <div className="bg-gradient-to-br from-orange-900/30 to-amber-900/30 border border-orange-700/30 shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl p-6 mt-4">
         <button className="w-full flex items-center justify-between mb-4 group" onClick={()=>setShowExpense(s=>!s)}>
@@ -468,8 +341,35 @@ export default function FinancePage(){
         
         {showExpense && (
         <>
-          {/* 添加支出表单 */}
-          <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-orange-700/30 mb-4">
+          {/* 标签页导航 */}
+          <div className="flex items-center gap-2 mb-4 bg-gray-800/50 backdrop-blur-sm rounded-lg p-2 border border-orange-700/30">
+            <button
+              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 text-sm ${
+                activeTab === 'manual'
+                  ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md'
+                  : 'text-orange-400 hover:bg-orange-900/30'
+              }`}
+              onClick={() => setActiveTab('manual')}
+            >
+              📝 手动支出
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 text-sm ${
+                activeTab === 'recurring'
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-md'
+                  : 'text-purple-400 hover:bg-purple-900/30'
+              }`}
+              onClick={() => setActiveTab('recurring')}
+            >
+              🤖 固定支出
+            </button>
+          </div>
+
+          {/* 手动支出标签页内容 */}
+          {activeTab === 'manual' && (
+          <>
+            {/* 添加支出表单 */}
+            <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-orange-700/30 mb-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-start relative">
               <input 
                 type="date" 
@@ -623,6 +523,23 @@ export default function FinancePage(){
               </tbody>
             </table>
           </div>
+          </>
+          )}
+
+          {/* 固定支出标签页内容 */}
+          {activeTab === 'recurring' && (
+            <SimplifiedRecurringExpense
+              currentCycle={ym}
+              onExpenseAdded={() => {
+                console.log(`[FinancePage] 固定支出触发刷新回调`);
+                setTimeout(() => {
+                  fetchList(true);
+                  setPayRefreshKey(k => k + 1);
+                  setRefreshKey(k => k + 1);
+                }, 500);
+              }}
+            />
+          )}
         </>
         )}
       </div>
@@ -638,6 +555,244 @@ export default function FinancePage(){
 
       {/* 移除Portal渲染的下拉列表，改为在经手人输入框中直接添加下拉列表 */}
     </Shell>
+  );
+}
+
+// 简化的固定支出组件 - 匹配手动支出界面风格
+function SimplifiedRecurringExpense({ currentCycle, onExpenseAdded }: { currentCycle: string; onExpenseAdded?: () => void }) {
+  const [recurringExpenses, setRecurringExpenses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    amount: '',
+    description: ''
+  });
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [hasExecuted, setHasExecuted] = useState(false);
+
+  // 加载固定支出列表
+  const loadRecurringExpenses = useCallback(async () => {
+    try {
+      const response = await fetch('/api/recurring-expenses');
+      const data = await response.json();
+      if (data.items) {
+        setRecurringExpenses(data.items);
+      }
+    } catch (error) {
+      console.error('加载固定支出失败:', error);
+    }
+  }, []);
+
+  // 自动执行固定支出
+  const checkAndExecuteRecurring = useCallback(async () => {
+    if (hasExecuted) return;
+
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/recurring-expenses?action=check_and_execute&cycle=${currentCycle}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setHasExecuted(true);
+        const addedCount = data.results?.filter((r: any) => r.status === 'added').length || 0;
+        if (addedCount > 0 && onExpenseAdded) {
+          setTimeout(() => onExpenseAdded(), 500);
+        }
+      }
+    } catch (error) {
+      console.error('执行固定支出失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentCycle, hasExecuted, onExpenseAdded]);
+
+  // 保存固定支出
+  const handleSave = async () => {
+    try {
+      if (!formData.name || !formData.amount) {
+        alert('请填写名称和金额');
+        return;
+      }
+
+      const payload = {
+        ...formData,
+        amount: parseFloat(formData.amount),
+        is_active: true,
+        ...(editingItem ? { id: editingItem.id } : {})
+      };
+
+      const response = await fetch('/api/recurring-expenses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadRecurringExpenses();
+        setFormData({ name: '', amount: '', description: '' });
+        setEditingItem(null);
+      } else {
+        alert(`保存失败: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('保存固定支出失败:', error);
+      alert('保存失败');
+    }
+  };
+
+  // 删除固定支出
+  const handleDelete = async (id: string) => {
+    if (!confirm('确定要删除这个固定支出配置吗？')) return;
+
+    try {
+      const response = await fetch(`/api/recurring-expenses?id=${id}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadRecurringExpenses();
+      } else {
+        alert(`删除失败: ${data.error}`);
+      }
+    } catch (error) {
+      console.error('删除固定支出失败:', error);
+      alert('删除失败');
+    }
+  };
+
+  // 编辑固定支出
+  const handleEdit = (item: any) => {
+    setEditingItem(item);
+    setFormData({
+      name: item.name,
+      amount: item.amount.toString(),
+      description: item.description || ''
+    });
+  };
+
+  // 取消编辑
+  const handleCancel = () => {
+    setEditingItem(null);
+    setFormData({ name: '', amount: '', description: '' });
+  };
+
+  // 组件加载时执行
+  useEffect(() => {
+    if (currentCycle && !hasExecuted) {
+      loadRecurringExpenses();
+      checkAndExecuteRecurring();
+    }
+  }, [currentCycle, hasExecuted, loadRecurringExpenses, checkAndExecuteRecurring]);
+
+  // 重置执行状态当周期变化时
+  useEffect(() => {
+    setHasExecuted(false);
+  }, [currentCycle]);
+
+  return (
+    <>
+      {/* 添加固定支出表单 - 匹配手动支出样式 */}
+      <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg p-4 border border-purple-700/30 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-start">
+          <input
+            placeholder="📝 支出名称"
+            value={formData.name}
+            onChange={e => setFormData({...formData, name: e.target.value})}
+            className="border-2 border-purple-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-purple-600/50 focus:ring-2 focus:ring-purple-900/30 transition-all duration-200 placeholder-gray-400"
+          />
+          <input
+            placeholder="💰 金额"
+            value={formData.amount}
+            onChange={e => setFormData({...formData, amount: e.target.value})}
+            className="border-2 border-purple-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-purple-600/50 focus:ring-2 focus:ring-purple-900/30 transition-all duration-200 placeholder-gray-400"
+          />
+          <input
+            placeholder="📄 描述（可选）"
+            value={formData.description}
+            onChange={e => setFormData({...formData, description: e.target.value})}
+            className="border-2 border-purple-700/30 bg-gray-800/50 text-gray-200 rounded-lg px-3 py-2 focus:border-purple-600/50 focus:ring-2 focus:ring-purple-900/30 transition-all duration-200 placeholder-gray-400"
+          />
+          <div className="flex gap-2">
+            <button
+              className="flex-1 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white font-semibold px-4 py-2 rounded-lg h-[44px] flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-95 transition-all duration-200"
+              onClick={handleSave}
+            >
+              {editingItem ? '💾 更新' : '➕ 添加'}
+            </button>
+            {editingItem && (
+              <button
+                className="bg-gray-600 hover:bg-gray-700 text-white font-semibold px-3 py-2 rounded-lg h-[44px] flex items-center justify-center shadow-md hover:shadow-lg active:scale-95 transition-all duration-200"
+                onClick={handleCancel}
+              >
+                ❌
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 固定支出记录表格 - 匹配手动支出样式 */}
+      <div className="bg-gray-800/70 backdrop-blur-sm rounded-lg border border-purple-700/30 overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-purple-900/30 border-b border-purple-700/30">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-purple-400 text-sm">支出名称</th>
+              <th className="px-4 py-3 text-right font-semibold text-purple-400 text-sm">金额</th>
+              <th className="px-4 py-3 text-left font-semibold text-purple-400 text-sm">描述</th>
+              <th className="px-4 py-3 text-center font-semibold text-purple-400 text-sm">状态</th>
+              <th className="px-4 py-3 text-center font-semibold text-purple-400 text-sm">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recurringExpenses.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                  📝 暂无固定支出配置
+                </td>
+              </tr>
+            ) : (
+              recurringExpenses.map((expense) => (
+                <tr key={expense.id} className="border-b border-purple-700/20 hover:bg-purple-900/10 transition-colors duration-200">
+                  <td className="px-4 py-3 font-medium text-gray-200 text-sm">{expense.name}</td>
+                  <td className="px-4 py-3 text-right font-mono font-bold text-purple-400 text-sm">
+                    ¥{Number(expense.amount||0).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="px-4 py-3 text-gray-300 text-sm">{expense.description || '-'}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      expense.is_active
+                        ? 'bg-green-900/40 text-green-400 border border-green-700/50'
+                        : 'bg-gray-900/40 text-gray-400 border border-gray-700/50'
+                    }`}>
+                      {expense.is_active ? '🟢 启用' : '🔴 禁用'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-900/40 border border-blue-700/50 text-blue-400 hover:bg-blue-800/40 hover:border-blue-600/50 active:scale-95 transition-all duration-200 font-medium shadow-sm hover:shadow-md text-xs"
+                        onClick={() => handleEdit(expense)}
+                      >
+                        ✏️ 编辑
+                      </button>
+                      <button
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-900/40 border border-red-700/50 text-red-400 hover:bg-red-800/40 hover:border-red-600/50 active:scale-95 transition-all duration-200 font-medium shadow-sm hover:shadow-md text-xs"
+                        onClick={() => handleDelete(expense.id)}
+                      >
+                        🗑️ 删除
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+    </>
   );
 }
 
@@ -1095,34 +1250,31 @@ function PayStats({ onChange, expenseItems }: { onChange?: ()=>void; expenseItem
         {/* 结算信息和按钮 */}
         {monthlyMembers.length > 0 && (
           <div className="mt-4 pt-4 border-t border-cyan-700/30">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-6 text-sm">
-                <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-yellow-700/30">
-                  <span className="text-yellow-400">💰</span>
-                  <span className="text-gray-300">总预算：</span>
-                  <span className="font-bold text-yellow-400">¥{totalBudget.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-orange-700/30">
-                  <span className="text-orange-400">💸</span>
-                  <span className="text-gray-300">总支出：</span>
-                  <span className="font-bold text-orange-400">¥{totalExpenses.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-green-700/30">
-                  <span className="text-green-400">💎</span>
-                  <span className="text-gray-300">结余：</span>
-                  <span className="font-bold text-green-400">¥{remainingBudget.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-purple-700/30">
-                  <span className="text-purple-400">👥</span>
-                  <span className="text-gray-300">整月人数：</span>
-                  <span className="font-bold text-purple-400">{monthlyMembers.length}</span>
-                </div>
+            <div className="flex items-center flex-wrap gap-4">
+              <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-yellow-700/30">
+                <span className="text-yellow-400">💰</span>
+                <span className="text-gray-300 text-sm">总预算：</span>
+                <span className="font-bold text-yellow-400 text-sm">¥{totalBudget.toFixed(2)}</span>
               </div>
-              
+              <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-orange-700/30">
+                <span className="text-orange-400">💸</span>
+                <span className="text-gray-300 text-sm">总支出：</span>
+                <span className="font-bold text-orange-400 text-sm">¥{totalExpenses.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-green-700/30">
+                <span className="text-green-400">💎</span>
+                <span className="text-gray-300 text-sm">结余：</span>
+                <span className="font-bold text-green-400 text-sm">¥{remainingBudget.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-purple-700/30">
+                <span className="text-purple-400">👥</span>
+                <span className="text-gray-300 text-sm">整月人数：</span>
+                <span className="font-bold text-purple-400 text-sm">{monthlyMembers.length}</span>
+              </div>
               <div className="flex items-center gap-2 bg-gray-800/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-green-700/30">
                 <span className="text-green-400">💰</span>
                 <button
-                  className={`px-4 py-2 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200 ${
+                  className={`px-4 py-2 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-200 text-sm ${
                     isSettling || remainingBudget <= 0 || monthlyMembers.length === 0
                       ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                       : 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white'

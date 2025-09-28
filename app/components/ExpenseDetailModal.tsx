@@ -133,22 +133,26 @@ export default function ExpenseDetailModal({ isOpen, onClose, handlerData }: Exp
 
       {/* 图片查看器 */}
       {viewerSrc && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-60 p-4">
-          <div className="relative max-w-full max-h-full">
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-60 p-4"
+          onClick={closeViewer}
+        >
+          <div className="relative w-full h-full flex items-center justify-center">
             <button
               onClick={closeViewer}
-              className="absolute top-4 right-4 text-white bg-black bg-opacity-50 rounded-full w-10 h-10 flex items-center justify-center text-xl font-bold hover:bg-opacity-75"
+              className="absolute top-4 right-4 text-white bg-black/50 rounded-full w-12 h-12 flex items-center justify-center text-2xl font-bold hover:bg-black/70 transition-all duration-200 z-10"
             >
               ×
             </button>
             <img
               src={viewerSrc}
               alt="支出附件"
-              className="max-w-full max-h-full object-contain rounded-lg"
+              className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg shadow-2xl"
               onError={() => {
                 alert('图片加载失败');
                 closeViewer();
               }}
+              onClick={(e) => e.stopPropagation()}
             />
           </div>
         </div>
