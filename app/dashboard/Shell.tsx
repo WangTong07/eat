@@ -42,6 +42,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       label: "财务详情",
       gradient: "from-cyan-500 to-blue-600",
       bgGradient: "from-cyan-50 to-blue-50"
+    },
+    {
+      href: "/finance-audit",
+      icon: "📊",
+      label: "支出核对",
+      gradient: "from-violet-500 to-purple-600",
+      bgGradient: "from-violet-50 to-purple-50"
     }
   ];
 

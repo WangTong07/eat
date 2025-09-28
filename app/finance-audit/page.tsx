@@ -5,6 +5,7 @@ import FinanceAuditSummary from "../components/FinanceAuditSummary";
 import ExpenseByHandlerTable from "../components/ExpenseByHandlerTable";
 import ExpenseDetailModal from "../components/ExpenseDetailModal";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { useRealtimeSubscription } from "@/lib/useRealtimeSubscription";
 
 interface Expense {
   id: string;
@@ -235,14 +236,47 @@ export default function FinanceAuditPage() {
 
       // 调用成员缴费API
       const [year, month] = period.split('-').map(v => parseInt(v));
+      console.log('[FinanceAudit] 开始获取缴费数据...', { year, month });
+
       const paymentsResponse = await fetch(`/api/members/pay?year=${year}&month=${month}`);
-      const paymentsData = await paymentsResponse.json();
+      if (!paymentsResponse.ok) {
+        throw new Error(`获取缴费数据失败: ${paymentsResponse.status} ${paymentsResponse.statusText}`);
+      }
+
+      const paymentsText = await paymentsResponse.text();
+      console.log('[FinanceAudit] 缴费API响应:', paymentsText.substring(0, 200));
+
+      let paymentsData;
+      try {
+        paymentsData = JSON.parse(paymentsText);
+      } catch (parseError) {
+        console.error('[FinanceAudit] 解析缴费数据失败:', parseError);
+        throw new Error(`解析缴费数据失败: ${parseError}`);
+      }
+
       const payments = paymentsData.items || [];
+      console.log('[FinanceAudit] 获取到缴费记录:', payments.length);
 
       // 调用成员列表API
+      console.log('[FinanceAudit] 开始获取成员数据...');
       const membersResponse = await fetch('/api/members');
-      const membersData = await membersResponse.json();
+      if (!membersResponse.ok) {
+        throw new Error(`获取成员数据失败: ${membersResponse.status} ${membersResponse.statusText}`);
+      }
+
+      const membersText = await membersResponse.text();
+      console.log('[FinanceAudit] 成员API响应:', membersText.substring(0, 200));
+
+      let membersData;
+      try {
+        membersData = JSON.parse(membersText);
+      } catch (parseError) {
+        console.error('[FinanceAudit] 解析成员数据失败:', parseError);
+        throw new Error(`解析成员数据失败: ${parseError}`);
+      }
+
       const members = (membersData.items || []).filter((m: any) => m.is_active);
+      console.log('[FinanceAudit] 获取到活跃成员:', members.length);
 
       // 处理数据，与财务页面完全相同的逻辑
       const processedData = processExpensesData(expenses, payments, members, period, { startDate, endDate });
@@ -261,6 +295,37 @@ export default function FinanceAuditPage() {
   useEffect(() => {
     loadAuditData(selectedPeriod);
   }, [selectedPeriod]);
+
+  // 添加实时订阅 - 监听支出记录变化
+  const handleExpensesChange = useCallback(() => {
+    console.log('[FinanceAudit] 检测到支出记录变更，重新加载...');
+    setTimeout(() => {
+      loadAuditData(selectedPeriod);
+    }, 1000);
+  }, [selectedPeriod, loadAuditData]);
+
+  // 添加实时订阅 - 监听缴费数据变化
+  const handlePaymentsChange = useCallback(() => {
+    console.log('[FinanceAudit] 检测到缴费数据变更，重新加载...');
+    setTimeout(() => {
+      loadAuditData(selectedPeriod);
+    }, 1000);
+  }, [selectedPeriod, loadAuditData]);
+
+  useRealtimeSubscription({
+    table: 'expenses',
+    onChange: handleExpensesChange
+  });
+
+  useRealtimeSubscription({
+    table: 'member_payments',
+    onChange: handlePaymentsChange
+  });
+
+  // 添加刷新按钮功能
+  const handleRefresh = useCallback(async () => {
+    await loadAuditData(selectedPeriod);
+  }, [selectedPeriod, loadAuditData]);
 
   // 处理周期变更
   const handlePeriodChange = (period: string) => {
@@ -297,27 +362,37 @@ export default function FinanceAuditPage() {
         {/* 页面标题和周期选择 */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">💰 支出核对</h1>
-            <p className="text-gray-600">
+            <h1 className="text-3xl font-bold text-white mb-2">💰 支出核对</h1>
+            <p className="text-gray-300">
               查看周期财务统计和个人支出明细，计算返费金额
             </p>
           </div>
 
-          <div className="mt-4 lg:mt-0">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              选择周期 (21号周期)
-            </label>
-            <select
-              value={selectedPeriod}
-              onChange={(e) => handlePeriodChange(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[200px]"
+          <div className="mt-4 lg:mt-0 flex items-end gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                选择周期 (21号周期)
+              </label>
+              <select
+                value={selectedPeriod}
+                onChange={(e) => handlePeriodChange(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[200px]"
+              >
+                {availablePeriods.map(period => (
+                  <option key={period.id} value={period.id}>
+                    {period.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors duration-200 flex items-center gap-2 h-[44px]"
             >
-              {availablePeriods.map(period => (
-                <option key={period.id} value={period.id}>
-                  {period.label}
-                </option>
-              ))}
-            </select>
+              <span className={loading ? 'animate-spin' : ''}>🔄</span>
+              {loading ? '同步中' : '同步数据'}
+            </button>
           </div>
         </div>
 
