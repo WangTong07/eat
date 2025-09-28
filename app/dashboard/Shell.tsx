@@ -1,11 +1,41 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
 
-export default function Shell({ children }: { children: React.ReactNode }) {
+// 内部组件处理认证逻辑
+function ShellContent({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout, isLoading } = useAuth();
+
+  // 检查认证状态
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isLoading, router]);
+
+  // 如果正在加载或没有用户，显示加载状态
+  if (isLoading || !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 to-slate-800 flex items-center justify-center">
+        <div className="text-center text-white">
+          <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg animate-pulse">
+            <span className="text-white text-3xl">🍽️</span>
+          </div>
+          <div className="text-lg font-medium">验证身份中...</div>
+        </div>
+      </div>
+    );
+  }
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
 
   const navItems = [
     {
@@ -77,13 +107,47 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         <aside className={`fixed lg:static top-14 lg:top-0 left-0 bottom-0 w-72 bg-gray-800/80 backdrop-blur-md shadow-xl transform ${open ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 transition-all duration-300 z-40 overflow-y-auto border-r border-gray-700/50`}>
           {/* 头部区域 - 深色主题设计 */}
           <div className="p-6 bg-gradient-to-br from-emerald-900/30 to-teal-900/30 border-b border-emerald-700/30">
-            <div className="flex items-center mb-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg mr-4">
-                <span className="text-white text-2xl">🍽️</span>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg mr-4">
+                  <span className="text-white text-2xl">🍽️</span>
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">AI伙食官</h1>
+                  <p className="text-sm text-emerald-400/70 font-medium">智能伙食管理系统</p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">AI伙食官</h1>
-                <p className="text-sm text-emerald-400/70 font-medium">智能伙食管理系统</p>
+              <button
+                onClick={handleLogout}
+                className="text-gray-400 hover:text-red-400 transition-colors duration-200 p-2 rounded-lg hover:bg-red-900/20"
+                title="退出登录"
+              >
+                <i className="fa fa-sign-out text-lg" />
+              </button>
+            </div>
+            {/* 用户信息 */}
+            <div className="bg-gray-800/50 rounded-lg p-3 mt-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-3 ${
+                    user.role === 'admin'
+                      ? 'bg-gradient-to-br from-red-500 to-pink-600'
+                      : 'bg-gradient-to-br from-blue-500 to-cyan-600'
+                  }`}>
+                    <span className="text-white text-sm">
+                      {user.role === 'admin' ? '👑' : '👤'}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-white font-medium text-sm">{user.name}</div>
+                    <div className="text-xs text-gray-400">
+                      {user.role === 'admin' ? '管理员' : '普通用户'}
+                    </div>
+                  </div>
+                </div>
+                <div className={`w-2 h-2 rounded-full ${
+                  user.isActive ? 'bg-green-400' : 'bg-gray-500'
+                }`} />
               </div>
             </div>
           </div>
@@ -149,4 +213,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-
+// 主导出组件，提供认证上下文
+export default function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <ShellContent>{children}</ShellContent>
+    </AuthProvider>
+  );
+}
