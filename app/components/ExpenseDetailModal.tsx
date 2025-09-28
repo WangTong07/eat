@@ -29,7 +29,7 @@ export default function ExpenseDetailModal({ isOpen, onClose, handlerData }: Exp
   if (!isOpen || !handlerData) return null;
 
   const formatCurrency = (amount: number) => {
-    return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+    return `¥${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatDate = (dateStr: string) => {
